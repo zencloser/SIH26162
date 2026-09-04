@@ -1,0 +1,162 @@
+[
+  {
+    "id": "E001",
+    "location": {
+      "latitude": 28.6139,
+      "longitude": 77.2090
+    },
+    "detection": {
+      "timestamp": "2026-09-04T14:30:00Z",
+      "source": "VIIRS",
+      "satellite": "NOAA-21",
+      "frp": 312.0,
+      "brightness": 341.2,
+      "firms_confidence": "high"
+    },
+    "classification": {
+      "label": "industrial_fire",
+      "confidence": 0.93,
+      "reasoning": [
+        "High thermal intensity",
+        "Industrial facility nearby"
+      ]
+    },
+    "persistence": {
+      "score": 18,
+      "detection_count": 4,
+      "first_detected": "2026-08-28T14:30:00Z",
+      "last_detected": "2026-09-04T14:30:00Z"
+    },
+    "context": {
+      "industrial_area": true,
+      "facility_type": "factory",
+      "distance_meters": 140,
+      "schools_count": 1,
+      "hospitals_count": 0
+    },
+    "risk": {
+      "score": 87,
+      "severity": "high"
+    }
+  },
+  {
+    "id": "E002",
+    "location": {
+      "latitude": 28.6200,
+      "longitude": 77.1800
+    },
+    "detection": {
+      "timestamp": "2026-09-04T15:10:00Z",
+      "source": "VIIRS",
+      "satellite": "NOAA-20",
+      "frp": 95.0,
+      "brightness": 325.4,
+      "firms_confidence": "medium"
+    },
+    "classification": {
+      "label": "natural_fire",
+      "confidence": 0.81,
+      "reasoning": [
+        "Vegetation-dominated surroundings",
+        "No nearby industrial facility"
+      ]
+    },
+    "persistence": {
+      "score": 8,
+      "detection_count": 2,
+      "first_detected": "2026-09-03T15:00:00Z",
+      "last_detected": "2026-09-04T15:10:00Z"
+    },
+    "context": {
+      "industrial_area": false,
+      "facility_type": null,
+      "distance_meters": null,
+      "schools_count": 0,
+      "hospitals_count": 0
+    },
+    "risk": {
+      "score": 48,
+      "severity": "medium"
+    }
+  },
+  {
+    "id": "E003",
+    "location": {
+      "latitude": 28.5500,
+      "longitude": 77.2500
+    },
+    "detection": {
+      "timestamp": "2026-09-04T16:00:00Z",
+      "source": "VIIRS",
+      "satellite": "NOAA-21",
+      "frp": 62.0,
+      "brightness": 318.7,
+      "firms_confidence": "high"
+    },
+    "classification": {
+      "label": "agricultural_burning",
+      "confidence": 0.89,
+      "reasoning": [
+        "Low thermal intensity",
+        "Agricultural land context"
+      ]
+    },
+    "persistence": {
+      "score": 5,
+      "detection_count": 1,
+      "first_detected": "2026-09-04T16:00:00Z",
+      "last_detected": "2026-09-04T16:00:00Z"
+    },
+    "context": {
+      "industrial_area": false,
+      "facility_type": null,
+      "distance_meters": null,
+      "schools_count": 0,
+      "hospitals_count": 0
+    },
+    "risk": {
+      "score": 32,
+      "severity": "low"
+    }
+  },
+  {
+    "id": "E004",
+    "location": {
+      "latitude": 28.5900,
+      "longitude": 77.2300
+    },
+    "detection": {
+      "timestamp": "2026-09-04T17:20:00Z",
+      "source": "VIIRS",
+      "satellite": "NOAA-20",
+      "frp": 145.0,
+      "brightness": 330.5,
+      "firms_confidence": "high"
+    },
+    "classification": {
+      "label": "persistent_source",
+      "confidence": 0.91,
+      "reasoning": [
+        "Repeated detections at the same location",
+        "Stable thermal activity over time"
+      ]
+    },
+    "persistence": {
+      "score": 91,
+      "detection_count": 28,
+      "first_detected": "2026-07-20T17:00:00Z",
+      "last_detected": "2026-09-04T17:20:00Z"
+    },
+    "context": {
+      "industrial_area": true,
+      "facility_type": "power_plant",
+      "distance_meters": 80,
+      "schools_count": 0,
+      "hospitals_count": 1
+    },
+    "risk": {
+      "score": 61,
+      "severity": "medium"
+    }
+  }
+]

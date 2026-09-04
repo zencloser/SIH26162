@@ -1,0 +1,68 @@
+{
+  "E001": [
+    {
+      "timestamp": "2026-08-28T14:30:00Z",
+      "frp": 42.0,
+      "brightness": 320.1
+    },
+    {
+      "timestamp": "2026-08-30T14:30:00Z",
+      "frp": 48.0,
+      "brightness": 324.5
+    },
+    {
+      "timestamp": "2026-09-01T14:30:00Z",
+      "frp": 51.0,
+      "brightness": 327.2
+    },
+    {
+      "timestamp": "2026-09-04T14:30:00Z",
+      "frp": 312.0,
+      "brightness": 341.2
+    }
+  ],
+
+  "E002": [
+    {
+      "timestamp": "2026-09-03T15:00:00Z",
+      "frp": 72.0,
+      "brightness": 322.1
+    },
+    {
+      "timestamp": "2026-09-04T15:10:00Z",
+      "frp": 95.0,
+      "brightness": 325.4
+    }
+  ],
+
+  "E003": [
+    {
+      "timestamp": "2026-09-04T16:00:00Z",
+      "frp": 62.0,
+      "brightness": 318.7
+    }
+  ],
+
+  "E004": [
+    {
+      "timestamp": "2026-07-20T17:00:00Z",
+      "frp": 138.0,
+      "brightness": 328.2
+    },
+    {
+      "timestamp": "2026-08-01T17:10:00Z",
+      "frp": 142.0,
+      "brightness": 329.4
+    },
+    {
+      "timestamp": "2026-08-15T17:15:00Z",
+      "frp": 149.0,
+      "brightness": 331.0
+    },
+    {
+      "timestamp": "2026-09-04T17:20:00Z",
+      "frp": 145.0,
+      "brightness": 330.5
+    }
+  ]
+}
