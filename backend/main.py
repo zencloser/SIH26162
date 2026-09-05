@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from routes.hotspots import router as hotspots_router
 from routes.incidents import router as incidents_router
@@ -10,6 +11,16 @@ app = FastAPI(
     title="AGNIRA Backend",
     description="Backend API for SIH26162",
     version="1.0.0"
+)
+
+
+# Allow frontend to communicate with backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
