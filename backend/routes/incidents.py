@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from models.event import Event
+from services.live_event_store import get_event
 
 
 router = APIRouter()
@@ -15,6 +16,13 @@ DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "sample_events.jso
 @router.get("/api/incidents/{event_id}")
 def get_incident(event_id: str):
 
+    # First check live events
+    live_event = get_event(event_id)
+
+    if live_event is not None:
+        return live_event
+
+    # Fall back to sample data
     with open(DATA_FILE, "r") as file:
         data = json.load(file)
 

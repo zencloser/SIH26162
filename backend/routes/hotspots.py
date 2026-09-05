@@ -5,8 +5,9 @@ from services.osm_service import (
     get_nearby_industrial_features,
     extract_industrial_context
 )
-from services.risk_service import calculate_risk
 from services.ml_service import predict_classification
+from services.risk_service import calculate_risk
+from services.live_event_store import save_event
 from models.hotspot import LiveHotspot
 
 
@@ -73,7 +74,11 @@ def get_hotspots(
                 risk=risk
             )
 
-            events.append(event.model_dump(mode="json"))
+            event_data = event.model_dump(mode="json")
+
+            save_event(event_data)
+
+            events.append(event_data)
 
         return {
             "source": "NASA FIRMS",
