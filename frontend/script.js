@@ -1,787 +1,322 @@
 /* =========================================================
-   DATA MODEL  (backend-ready shape — swap the arrays below for
-   API responses without touching any rendering code)
+   AGNIRA — Live Map
+   Data model + rendering + interactions.
+   Swap HOTSPOTS / PLACES with real API data without touching
+   any of the rendering or event-handling code below.
+========================================================= */
 
-   Hotspot: { id, name, location, coordinates:[lng,lat], thermalPower(MW),
-              temperature(K), confidence(0-100), severity('HIGH'|'MODERATE'|'LOW'),
-              detectedAt, area(km²), type, classification:[{label,val,color}],
-              activity:[{color,text,time}] }
-   IndustrialCluster: derived from Hotspot via clusterPolygon()
-   Facility: { id, name, coordinates:[lng,lat], type, risk }
-   SatelliteObservation: { time, hotspotId, text, color }  (see timelineEvents)
-   Incident: a Hotspot rendered in the Incidents / Live Feed views
-   RiskAssessment: { thermalIntensity, confidence, spreadPotential } — derived
-                   per-hotspot in buildRiskAssessment()
-
-   Future backend endpoints this frontend is shaped for:
-     GET /hotspots            -> hotspots
-     GET /incidents           -> hotspots (time-ordered)
-     GET /facilities          -> facilities
-     GET /satellite-observations -> timelineEvents
-     GET /clusters             -> clusterFeatures
-   ========================================================= */
-const hotspots = [
+const HOTSPOTS = [
   {
-    id:'rr', name:'RR Venkatapuram', location:'Kapileswarapuram Road, Visakhapatnam, Andhra Pradesh',
-    coordinates:[83.1950, 17.6300], thermalPower:47.2, temperature:312, confidence:88,
-    severity:'HIGH', detectedAt:'04 Sep 2025, 19:35 IST', area:2.8, type:'industrial-fire',
-    classification:[
-      {label:'Industrial Fire', val:54, color:'var(--red)'},
-      {label:'Chemical Release (Possible)', val:16, color:'var(--orange)'},
-      {label:'Thermal Anomaly (Process)', val:24, color:'var(--amber)'},
-      {label:'Vegetation Fire', val:6, color:'var(--green)'}
-    ],
-    activity:[
-      {color:'var(--amber)', text:'Anomaly flagged by Suomi NPP VIIRS', time:'19:21'},
-      {color:'var(--red)', text:'Thermal intensity increased', time:'19:35'}
-    ]
+    id: 'parawada',
+    name: 'Parawada Industrial Cluster',
+    location: 'Visakhapatnam, Andhra Pradesh',
+    lat: 17.6027, lng: 83.2233,
+    x: 46.5, y: 48,          // position on the map, in % of map area
+    category: 'fire',        // fire | chemical | moderate | normal
+    risk: 'high',            // high | moderate | normal
+    status: 'Active',
+    thermal: 32.6, temp: 326, confidence: 81,
+    aiClass: 'Industrial Fire', aiPct: 62,
+    desc: 'Elevated thermal output within an industrial cluster. Multiple sources confirm anomaly.',
+    detected: '04 Sep 2026, 22:41 IST', area: '~4.2 km²', sat: 'Suomi NPP · VIIRS I-Band',
+    selected: true,
+    showTooltip: true
   },
   {
-    id:'atc', name:'Atchutapuram SEZ', location:'Atchutapuram, Visakhapatnam, Andhra Pradesh',
-    coordinates:[83.1691, 17.5965], thermalPower:32.6, temperature:298, confidence:81,
-    severity:'MODERATE', detectedAt:'04 Sep 2025, 19:42 IST', area:1.9, type:'thermal-anomaly',
-    classification:[
-      {label:'Industrial Fire', val:31, color:'var(--red)'},
-      {label:'Chemical Release (Possible)', val:12, color:'var(--orange)'},
-      {label:'Thermal Anomaly (Process)', val:48, color:'var(--amber)'},
-      {label:'Vegetation Fire', val:9, color:'var(--green)'}
-    ],
-    activity:[
-      {color:'var(--green)', text:'Detection confirmed by multiple sources', time:'19:30'},
-      {color:'var(--amber)', text:'Thermal reading stable', time:'19:42'}
-    ]
+    id: 'anakapalle-sensor',
+    name: 'Anakapalle Transformer Yard',
+    location: 'Anakapalle, Andhra Pradesh',
+    lat: 17.6910, lng: 83.0037,
+    x: 44, y: 20,
+    category: 'watch',
+    risk: 'normal',
+    status: 'Monitoring',
+    thermal: 4.1, temp: 301, confidence: 38,
+    aiClass: 'No Anomaly', aiPct: 12,
+    desc: 'Routine thermal signature consistent with grid infrastructure. No action required.',
+    detected: '04 Sep 2026, 21:10 IST', area: '~0.6 km²', sat: 'NOAA-20 · VIIRS I-Band'
   },
   {
-    id:'para', name:'Parawada Industrial Cluster', location:'Parawada, Visakhapatnam, Andhra Pradesh',
-    coordinates:[83.2233, 17.6027], thermalPower:64.8, temperature:326, confidence:94,
-    severity:'HIGH', detectedAt:'04 Sep 2025, 19:58 IST', area:4.2, type:'industrial-fire',
-    classification:[
-      {label:'Industrial Fire', val:62, color:'var(--red)'},
-      {label:'Chemical Release (Possible)', val:21, color:'var(--orange)'},
-      {label:'Thermal Anomaly (Process)', val:12, color:'var(--amber)'},
-      {label:'Vegetation Fire', val:3, color:'var(--green)'}
-    ],
-    activity:[
-      {color:'var(--green)', text:'Detection confirmed by multiple sources', time:'19:58'},
-      {color:'var(--red)', text:'Thermal intensity increased', time:'19:42'},
-      {color:'var(--amber)', text:'Anomaly flagged by Suomi NPP VIIRS', time:'19:21'}
-    ]
-  }
+    id: 'nh16-facility',
+    name: 'NH16 Roadside Facility',
+    location: 'National Highway 16, Visakhapatnam',
+    lat: 17.660, lng: 83.140,
+    x: 57.5, y: 27,
+    category: 'facilities',
+    risk: 'normal',
+    status: 'Operational',
+    thermal: 6.4, temp: 305, confidence: 44,
+    aiClass: 'Facility Baseline', aiPct: 18,
+    desc: 'Registered industrial facility operating within normal thermal bounds.',
+    detected: '04 Sep 2026, 20:55 IST', area: '~1.1 km²', sat: 'Suomi NPP · VIIRS I-Band'
+  },
+  {
+    id: 'port-watch',
+    name: 'Port Approach Thermal Watch',
+    location: 'Visakhapatnam Port, Andhra Pradesh',
+    lat: 17.685, lng: 83.290,
+    x: 69, y: 32,
+    category: 'moderate',
+    risk: 'moderate',
+    status: 'Monitoring',
+    thermal: 14.8, temp: 312, confidence: 55,
+    aiClass: 'Flaring Activity', aiPct: 41,
+    desc: 'Intermittent flaring consistent with port refinery operations. Being tracked for persistence.',
+    detected: '04 Sep 2026, 22:05 IST', area: '~2.0 km²', sat: 'NOAA-21 · VIIRS I-Band'
+  },
+  {
+    id: 'nakkapalli-chem',
+    name: 'Nakkapalli Chemical Storage',
+    location: 'Nakkapalli, Andhra Pradesh',
+    lat: 17.560, lng: 82.960,
+    x: 23, y: 65,
+    category: 'chemical',
+    risk: 'moderate',
+    status: 'Monitoring',
+    thermal: 9.7, temp: 308, confidence: 47,
+    aiClass: 'Chemical Signature', aiPct: 34,
+    desc: 'Thermal profile consistent with chemical storage venting. No fire signature detected.',
+    detected: '04 Sep 2026, 21:48 IST', area: '~1.4 km²', sat: 'Suomi NPP · VIIRS M-Band'
+  },
+  {
+    id: 'atchutapuram-sez',
+    name: 'Atchutapuram SEZ',
+    location: 'Atchutapuram, Andhra Pradesh',
+    lat: 17.520, lng: 83.070,
+    x: 43, y: 79,
+    category: 'facilities',
+    risk: 'high',
+    status: 'Active',
+    thermal: 21.3, temp: 318, confidence: 69,
+    aiClass: 'Industrial Fire', aiPct: 47,
+    desc: 'Sustained thermal output above baseline for this SEZ zone. Recommend field verification.',
+    detected: '04 Sep 2026, 22:30 IST', area: '~3.1 km²', sat: 'NOAA-20 · VIIRS I-Band'
+  },
+  {
+    id: 'parawada-fac-2',
+    name: 'Parawada Facility Block B',
+    location: 'Parawada, Visakhapatnam',
+    lat: 17.598, lng: 83.210,
+    x: 55, y: 55,
+    category: 'facilities',
+    risk: 'normal',
+    status: 'Operational',
+    thermal: 5.9, temp: 303, confidence: 33,
+    aiClass: 'Facility Baseline', aiPct: 15,
+    desc: 'Registered industrial facility operating within normal thermal bounds.',
+    detected: '04 Sep 2026, 21:20 IST', area: '~0.9 km²', sat: 'Suomi NPP · VIIRS I-Band'
+  },
 ];
 
-const facilities = [
-  {id:'hpcl', name:'HPCL Visakhapatnam Refinery', coordinates:[83.1966, 17.6531], type:'Refinery', risk:'HIGH'},
-  {id:'lt',   name:'L&T Shipbuilding',              coordinates:[83.2100, 17.6400], type:'Shipyard', risk:'MODERATE'},
-  {id:'port', name:'Adani Vizag Port',               coordinates:[83.2960, 17.6868], type:'Port', risk:'LOW'},
-  {id:'hsl',  name:'Hindustan Shipyard',              coordinates:[83.2907, 17.6910], type:'Shipyard', risk:'LOW'},
-  {id:'coro', name:'Coromandel Fertilizers Plant',    coordinates:[83.2020, 17.6250], type:'Chemical Plant', risk:'MODERATE'}
+const PLACES = [
+  { name: 'Visakhapatnam', x: 61, y: 44 },
+  { name: 'Anakapalle', x: 17, y: 21 },
+  { name: 'Nakkapalli', x: 11, y: 66 },
+  { name: 'Parawada', x: 20.5, y: 59 },
+  { name: 'Atchutapuram', x: 34, y: 75 },
+  { name: 'Visakhapatnam Port', x: 62, y: 36 },
+  { name: 'NH16', x: 48.5, y: 22.5 },
+  { name: 'Bay of Bengal', x: 63, y: 71 },
 ];
 
-const places = {
-  'visakhapatnam':[83.2185, 17.6868], 'vizag':[83.2185, 17.6868],
-  'parawada':[83.2233, 17.6027],
-  'atchutapuram':[83.1691, 17.5965],
-  'bheemunipatnam':[83.4483, 17.8905],
-  'duvvada':[83.1560, 17.6931],
-  'rr venkatapuram':[83.1950, 17.6300]
-};
+const riskColor = { high: 'var(--red)', moderate: 'var(--amber)', normal: 'var(--green)' };
+const categoryDotClass = { fire: 'red', chemical: 'purple', moderate: 'amber', normal: 'green', facilities: 'fac', watch: 'blue' };
 
-function haversine(a, b){
-  const R = 6371;
-  const dLat = (b[1]-a[1]) * Math.PI/180;
-  const dLng = (b[0]-a[0]) * Math.PI/180;
-  const lat1 = a[1] * Math.PI/180, lat2 = b[1] * Math.PI/180;
-  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
-}
-function clusterPolygon(center, r){
-  const pts = [];
-  const n = 6;
-  for(let i=0;i<=n;i++){
-    const ang = (i/n) * Math.PI*2 + Math.PI/6;
-    pts.push([center[0] + Math.cos(ang)*r*1.3, center[1] + Math.sin(ang)*r]);
-  }
-  return pts;
+let currentTheme = 'day';
+let activeFilter = 'all';
+let minConfidence = 0;
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let selectedId = HOTSPOTS.find(h => h.selected)?.id || HOTSPOTS[0].id;
+let layerVisibility = { hotspots: true, clusters: true, facilities: true, roads: true, labels: true };
+
+/* ---------- rendering ---------- */
+
+const markersLayer = document.getElementById('markersLayer');
+
+function visibleHotspots(){
+  return HOTSPOTS.filter(h => {
+    if (h.confidence < minConfidence) return false;
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'facilities') return h.category === 'facilities';
+    return h.category === activeFilter;
+  });
 }
 
-/* =========================================================
-   MAP INIT
-   ---------------------------------------------------------
-   Wrapped in try/catch so that if the MapLibre library fails
-   to load (blocked CDN, offline, corporate firewall, etc.)
-   the rest of the dashboard — search, filters, day/night
-   toggle, tabs, nav — keeps working instead of the whole
-   script silently dying on the very first line.
-   ========================================================= */
-const mapLibLoaded = typeof maplibregl !== 'undefined';
-let map;
+// marker DOM elements persist across re-renders (keyed by hotspot id) so that
+// showing/hiding via filters or layer toggles animates opacity instead of
+// abruptly destroying and recreating nodes.
+const markerEls = {};
 
-function makeStubMap(){
-  return {
-    on(){}, off(){}, addControl(){}, addSource(){}, addLayer(){},
-    setPaintProperty(){}, setLayoutProperty(){}, setFilter(){},
-    getLayer(){ return false; },
-    getCanvas(){ return {style:{}}; },
-    getSource(){ return null; },
-    flyTo(){}, easeTo(){}, resize(){},
-    getZoom(){ return 10.6; },
-    getCenter(){ return {lat:17.6600, lng:83.2050}; }
-  };
-}
+function renderMarkers(){
+  const list = visibleHotspots();
+  const visibleIds = new Set();
 
-function showMapFallbackNotice(){
-  const wrap = document.getElementById('mapWrap');
-  if(!wrap) return;
-  const notice = document.createElement('div');
-  notice.style.cssText = 'position:absolute; inset:0; z-index:9; display:flex; align-items:center; justify-content:center; text-align:center; padding:30px; background:var(--map-land, #050602);';
-  notice.innerHTML = `<div style="max-width:360px; color:var(--text-secondary,#A2A39A); font-family:var(--sans,sans-serif); font-size:13px; line-height:1.6;">
-    <div style="font-size:26px; margin-bottom:10px;">🗺️</div>
-    <div style="color:var(--text-primary,#E8E9E4); font-weight:700; margin-bottom:6px;">Map tiles unavailable</div>
-    The MapLibre library couldn't load — likely a blocked script or no internet connection.<br>
-    Search, filters, layers, day/night mode and every other control on this page still work normally.
-  </div>`;
-  wrap.appendChild(notice);
-}
-
-try{
-  if(!mapLibLoaded) throw new Error('maplibregl failed to load (script blocked or offline).');
-
-  map = new maplibregl.Map({
-    container:'maplibre-map',
-    style:{
-      version:8,
-      sources:{
-        'osm':{
-          type:'raster',
-          tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-          tileSize:256,
-          attribution:'© OpenStreetMap contributors'
-        }
-      },
-      layers:[
-        {id:'osm-layer', type:'raster', source:'osm',
-          paint:{
-            'raster-brightness-max':0.32,
-            'raster-brightness-min':0,
-            'raster-saturation':-0.55,
-            'raster-contrast':0.15,
-            'raster-hue-rotate':25
-          }
-        }
-      ]
-    },
-    center:[83.2050, 17.6600],
-    zoom:10.6,
-    attributionControl:true
+  list.forEach(h => {
+    if (h.category === 'facilities' && !layerVisibility.facilities) return;
+    if (h.category !== 'facilities' && !layerVisibility.hotspots) return;
+    visibleIds.add(h.id);
   });
 
-  map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'bottom-right');
-}catch(err){
-  console.error('AGNIRA: map failed to initialize, continuing in degraded (no-map) mode.', err);
-  map = makeStubMap();
-  showMapFallbackNotice();
+  HOTSPOTS.forEach(h => {
+    const cls = categoryDotClass[h.category] || 'green';
+    const isSelected = h.id === selectedId;
+    let el = markerEls[h.id];
+
+    if (!el) {
+      el = document.createElement('div');
+      el.dataset.id = h.id;
+      el.addEventListener('click', (e) => { e.stopPropagation(); selectHotspot(h.id); });
+      markersLayer.appendChild(el);
+      markerEls[h.id] = el;
+    }
+
+    el.className = `marker ${cls}` + (isSelected ? ' selected' : '') + (visibleIds.has(h.id) ? '' : ' marker--hidden');
+    el.dataset.risk = h.risk;
+    el.style.left = h.x + '%';
+    el.style.top = h.y + '%';
+
+    // every category — including facilities — renders as the same clean
+    // solid-core point; only size/color/glow differ (handled in CSS)
+    let inner = '<div class="pulse-ring"></div><div class="marker-dot"></div>';
+    if (h.showTooltip && isSelected) {
+      inner += `<div class="marker-tooltip">
+        <div class="tt-title">${h.name}</div>
+        <div class="tt-risk" style="color:${riskColor[h.risk]}"><span class="dot" style="background:${riskColor[h.risk]}"></span>${h.risk.toUpperCase()} RISK</div>
+        <div class="tt-meta">${h.thermal} MW · ${h.confidence}% confidence</div>
+      </div>`;
+    }
+    el.innerHTML = inner;
+  });
+
+  updateStatusCounts(list);
 }
 
-/* =========================================================
-   DAY / NIGHT THEME  (persists to localStorage)
-   ========================================================= */
-const THEME_KEY = 'agnira-theme';
-let currentTheme = localStorage.getItem(THEME_KEY) === 'day' ? 'day' : 'night';
-let currentMapStyle = 'satellite';
+// brief radar-lock detection animation — plays once, only when a hotspot
+// is newly selected, never on a routine re-render.
+function triggerDetectAnimation(id){
+  const el = markerEls[id];
+  if (!el) return;
+  el.classList.remove('marker--detect');
+  // force reflow so the animation can restart if selected again quickly
+  void el.offsetWidth;
+  el.classList.add('marker--detect');
+  setTimeout(() => el.classList.remove('marker--detect'), 1100);
+}
 
-const stylePresets = {
-  night:{
-    standard:{brightnessMax:0.28, brightnessMin:0,    saturation:-0.75, contrast:0.05, hue:0,  tint:'rgba(20,20,18,.30)'},
-    satellite:{brightnessMax:0.32, brightnessMin:0,    saturation:-0.55, contrast:0.15, hue:25, tint:'rgba(31,32,29,.28)'},
-    thermal:{brightnessMax:0.18, brightnessMin:0,    saturation:-0.85, contrast:0.28, hue:0,  tint:'rgba(10,6,4,.42)'}
-  },
-  day:{
-    standard:{brightnessMax:1.25, brightnessMin:0.55, saturation:-0.20, contrast:0.02, hue:0,  tint:'rgba(241,240,234,.08)'},
-    satellite:{brightnessMax:1.05, brightnessMin:0.35, saturation:0.05,  contrast:0.08, hue:12, tint:'rgba(214,196,150,.10)'},
-    thermal:{brightnessMax:0.85, brightnessMin:0.15, saturation:-0.50, contrast:0.22, hue:0,  tint:'rgba(90,40,20,.16)'}
+function updateStatusCounts(list){
+  const activeCount = list.filter(h => h.category !== 'facilities').length;
+  const highRiskCount = list.filter(h => h.risk === 'high').length;
+  document.getElementById('activeHotspotsCount').textContent = activeCount;
+  document.getElementById('highRiskCount').textContent = highRiskCount;
+}
+
+function selectHotspot(id){
+  HOTSPOTS.forEach(h => h.showTooltip = false);
+  const h = HOTSPOTS.find(x => x.id === id);
+  if (!h) return;
+  const card = document.getElementById('detailCard');
+  const isSwitchingHotspot = selectedId !== id && !card.classList.contains('hidden');
+  selectedId = id;
+  h.showTooltip = true;
+  renderMarkers();
+  triggerDetectAnimation(id);
+
+  if (isSwitchingHotspot && !prefersReducedMotion) {
+    card.classList.add('content-swap');
+    setTimeout(() => {
+      fillDetailCard(h);
+      card.classList.remove('content-swap');
+    }, 120);
+  } else {
+    fillDetailCard(h);
   }
-};
-function applyStylePreset(name){
-  currentMapStyle = name;
-  const p = stylePresets[currentTheme][name];
-  document.body.classList.toggle('mode-thermal', name === 'thermal');
-  if(!map.getLayer('osm-layer')) return;
-  map.setPaintProperty('osm-layer','raster-brightness-max', p.brightnessMax);
-  map.setPaintProperty('osm-layer','raster-brightness-min', p.brightnessMin);
-  map.setPaintProperty('osm-layer','raster-saturation', p.saturation);
-  map.setPaintProperty('osm-layer','raster-contrast', p.contrast);
-  map.setPaintProperty('osm-layer','raster-hue-rotate', p.hue);
-  document.getElementById('mapTint').style.background = p.tint;
+
+  card.classList.remove('hidden');
+  document.getElementById('detailExtra').classList.remove('show');
 }
+
+function fillDetailCard(h){
+  const dot = document.getElementById('detailRiskDot');
+  const label = document.getElementById('detailRiskLabel');
+  const pill = document.getElementById('detailStatusPill');
+  const color = riskColor[h.risk];
+  dot.style.background = color;
+  dot.style.boxShadow = `0 0 6px ${color}`;
+  label.textContent = h.risk.toUpperCase() + ' RISK';
+  label.style.color = color;
+  pill.textContent = h.status;
+
+  document.getElementById('detailTitle').textContent = h.name;
+  document.getElementById('detailLoc').textContent = h.location;
+  document.getElementById('detailCoords').textContent =
+    `${h.lat.toFixed(4)}° N, ${h.lng.toFixed(4)}° E`;
+
+  document.getElementById('statThermal').innerHTML = `${h.thermal} <span class="unit">MW</span>`;
+  document.getElementById('statTemp').innerHTML = `${h.temp} <span class="unit">K</span>`;
+  document.getElementById('statConf').innerHTML = `${h.confidence}<span class="unit">%</span>`;
+
+  // replay the small sequential fade-up entrance on the three metric boxes
+  document.querySelectorAll('#statRow .stat-box').forEach(box => {
+    box.style.animation = 'none';
+    void box.offsetWidth; // force reflow so the animation can restart
+    box.style.animation = '';
+  });
+
+  document.getElementById('aiClass').textContent = h.aiClass;
+  document.getElementById('aiPct').textContent = h.aiPct + '%';
+  document.getElementById('aiDesc').textContent = h.desc;
+
+  // the assessment's accent reflects what was actually found, not a fixed
+  // brand color — chemical signatures read purple, everything else follows
+  // the same risk severity as the status dot above
+  const aiColor = h.category === 'chemical' ? 'var(--purple)' : color;
+  document.getElementById('aiFlame').style.color = aiColor;
+  document.getElementById('aiPct').style.color = aiColor;
+  const barFill = document.getElementById('aiBarFill');
+  barFill.style.background = aiColor;
+
+  // animate the confidence bar from 0 up to its real (unaltered) value
+  barFill.style.transition = 'none';
+  barFill.style.width = '0%';
+  void barFill.offsetWidth; // force reflow
+  barFill.style.transition = '';
+  requestAnimationFrame(() => { barFill.style.width = h.aiPct + '%'; });
+
+  document.getElementById('extraDetected').textContent = h.detected;
+  document.getElementById('extraArea').textContent = h.area;
+  document.getElementById('extraSat').textContent = h.sat;
+}
+
+/* ---------- day / night ----------
+   currentTheme is the ONE source of truth for day/night. Every visible
+   signal — body theme, toggle classes (which drive the knob position,
+   label color, and dot color via CSS), aria-checked, and the "DAY"/"NIGHT"
+   word next to AGNIRA — is derived from it here, in one place, every time
+   the mode changes. Nothing else should set or read a separate flag. */
+
+const dayNightToggle = document.getElementById('dayNightToggle');
+
 function applyTheme(mode){
-  currentTheme = mode === 'day' ? 'day' : 'night';
-  const isNight = currentTheme === 'night';
+  const isNight = mode === 'night';
+  currentTheme = isNight ? 'night' : 'day';
   document.body.classList.toggle('theme-day', !isNight);
   dayNightToggle.classList.toggle('is-night', isNight);
   dayNightToggle.classList.toggle('is-day', !isNight);
   dayNightToggle.setAttribute('aria-checked', String(!isNight));
-  document.getElementById('modeBadge').textContent = 'MONITORING [' + (isNight ? 'NIGHT' : 'DAY') + ']';
-  localStorage.setItem(THEME_KEY, currentTheme);
-  applyStylePreset(currentMapStyle);
-}
-const dayNightToggle = document.getElementById('dayNightToggle');
-applyTheme(currentTheme); // reflect persisted/default theme in the topbar before first paint
-
-let selectedId = 'para';
-let activeFilters = new Set();
-let activeRiskFilters = new Set();
-let confidenceThreshold = 65;
-const markers = {};      // hotspot markers
-const facMarkers = {};   // facility markers
-let searchMarker = null;
-
-map.on('load', ()=>{
-  applyStylePreset('satellite');
-
-  /* --- Industrial cluster polygons (real GeoJSON layer) --- */
-  const clusterFeatures = hotspots.map(h=>({
-    type:'Feature',
-    properties:{ id:h.id, risk:h.severity, confidence:h.confidence, type:h.type },
-    geometry:{ type:'Polygon', coordinates:[clusterPolygon(h.coordinates, h.severity==='HIGH' && h.area>3 ? 0.018 : 0.012)] }
-  }));
-  map.addSource('clusters', {type:'geojson', data:{type:'FeatureCollection', features:clusterFeatures}});
-  map.addLayer({
-    id:'clusters-fill', type:'fill', source:'clusters',
-    paint:{
-      'fill-color':['match', ['get','risk'], 'HIGH', '#FF3B3B', 'MODERATE', '#F5A900', '#FF633D'],
-      'fill-opacity':0.10
-    }
-  });
-  map.addLayer({
-    id:'clusters-line', type:'line', source:'clusters',
-    paint:{
-      'line-color':['match', ['get','risk'], 'HIGH', '#FF3B3B', 'MODERATE', '#F5A900', '#FF633D'],
-      'line-width':1.5,
-      'line-dasharray':[2,2]
-    }
-  });
-  map.on('mouseenter','clusters-fill', ()=> map.getCanvas().style.cursor='pointer');
-  map.on('mouseleave','clusters-fill', ()=> map.getCanvas().style.cursor='');
-  map.on('click','clusters-fill', (e)=>{
-    const id = e.features[0].properties.id;
-    selectHotspot(id);
-  });
-
-  /* --- Roads & Transport overlay: NH16 corridor --- */
-  map.addSource('nh16', {type:'geojson', data:{type:'Feature', geometry:{type:'LineString', coordinates:[
-    [83.1400,17.6600],[83.1750,17.6350],[83.2050,17.6100],[83.2300,17.5850],[83.2600,17.5600]
-  ]}}});
-  map.addLayer({id:'nh16-line', type:'line', source:'nh16', paint:{
-    'line-color': getCSSVar('--map-major-roads'), 'line-width':2, 'line-dasharray':[0.2,2]
-  }});
-
-  /* --- Water bodies overlay (Bay of Bengal band) --- */
-  map.addSource('water', {type:'geojson', data:{type:'Feature', geometry:{type:'Polygon', coordinates:[[
-    [83.32,17.50],[83.55,17.50],[83.55,17.95],[83.32,17.95],[83.32,17.50]
-  ]]}}});
-  map.addLayer({id:'water-fill', type:'fill', source:'water', paint:{
-    'fill-color': getCSSVar('--map-water'), 'fill-opacity':0.55
-  }}, 'clusters-fill');
-
-  /* --- Administrative boundary (rough district outline) --- */
-  map.addSource('admin', {type:'geojson', data:{type:'Feature', geometry:{type:'LineString', coordinates:[
-    [83.05,17.50],[83.30,17.45],[83.55,17.60],[83.55,17.95],[83.30,18.00],[83.05,17.85],[83.05,17.50]
-  ]}}});
-  map.addLayer({id:'admin-line', type:'line', source:'admin', paint:{
-    'line-color': getCSSVar('--map-boundaries'), 'line-width':1.2, 'line-dasharray':[3,2]
-  }});
-  map.setLayoutProperty('admin-line','visibility','none');
-
-  /* --- Population density heatmap (demo) --- */
-  map.addSource('population', {type:'geojson', data:{type:'FeatureCollection', features:[
-    {type:'Feature', properties:{weight:0.9}, geometry:{type:'Point', coordinates:[83.2185,17.6868]}},
-    {type:'Feature', properties:{weight:0.6}, geometry:{type:'Point', coordinates:[83.2050,17.6600]}},
-    {type:'Feature', properties:{weight:0.5}, geometry:{type:'Point', coordinates:[83.1691,17.5965]}},
-    {type:'Feature', properties:{weight:0.4}, geometry:{type:'Point', coordinates:[83.2960,17.6868]}}
-  ]}});
-  map.addLayer({id:'population-heat', type:'heatmap', source:'population', paint:{
-    'heatmap-weight':['get','weight'],
-    'heatmap-intensity':1.1,
-    'heatmap-radius':60,
-    'heatmap-opacity':0.55,
-    'heatmap-color':[
-      'interpolate',['linear'],['heatmap-density'],
-      0,'rgba(0,0,0,0)',
-      0.3, 'rgba(69,71,63,.4)',
-      0.6, 'rgba(245,169,0,.45)',
-      1, 'rgba(255,99,61,.65)'
-    ]
-  }});
-  map.setLayoutProperty('population-heat','visibility','none');
-
-  /* --- Hotspot markers --- */
-  hotspots.forEach(h=>{
-    const el = document.createElement('div');
-    el.className = 'hs-marker';
-    el.dataset.id = h.id;
-    const c = h.severity === 'HIGH' ? 'red' : (h.severity==='MODERATE' ? 'amber' : 'orange');
-    const glowColor = c==='red' ? 'rgba(255,59,59,.5)' : (c==='amber' ? 'rgba(245,169,0,.45)' : 'rgba(255,99,61,.45)');
-    const glowDim = h.area > 3 ? 130 : 95;
-    const coreDim = h.area > 3 ? 20 : 13;
-    el.innerHTML = `
-      <div class="hs-glow" style="width:${glowDim}px; height:${glowDim}px; background:radial-gradient(circle, ${glowColor} 0%, transparent 72%);"></div>
-      <div class="hs-core" style="width:${coreDim}px; height:${coreDim}px;"></div>
-      <div class="hs-label">
-        <div class="name">🔥 ${h.name}</div>
-        <div class="meta"><span class="val ${c==='amber'?'amber':''}">${h.thermalPower.toFixed(1)} MW</span> · ${h.severity==='HIGH' ? (h.area>3?'High Risk':'High') : 'Moderate'}</div>
-      </div>`;
-    el.addEventListener('click', (e)=>{ e.stopPropagation(); selectHotspot(h.id); });
-    const marker = new maplibregl.Marker({element:el, anchor:'center'}).setLngLat(h.coordinates).addTo(map);
-    markers[h.id] = marker;
-  });
-
-  /* --- Facility markers --- */
-  facilities.forEach(f=>{
-    const el = document.createElement('div');
-    el.className = 'fac-marker';
-    el.title = f.name;
-    el.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      new maplibregl.Popup({offset:12, closeButton:false})
-        .setLngLat(f.coordinates)
-        .setHTML(`<b>${f.name}</b><br><span style="color:var(--text-secondary);font-size:11px;">${f.type} · ${f.risk} risk</span>`)
-        .addTo(map);
-    });
-    const marker = new maplibregl.Marker({element:el, anchor:'center'}).setLngLat(f.coordinates).addTo(map);
-    facMarkers[f.id] = marker;
-  });
-
-  map.on('click', (e)=>{
-    if(e.defaultPrevented) return;
-  });
-
-  applyThreshold();
-  selectHotspot('para');
-});
-
-map.on('mousemove', (e)=>{
-  document.getElementById('coordReadout').textContent =
-    `LAT ${e.lngLat.lat.toFixed(4)} · LNG ${e.lngLat.lng.toFixed(4)} · Z ${map.getZoom().toFixed(1)}`;
-});
-
-function getCSSVar(name){
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  document.getElementById('modeWord').textContent = isNight ? 'NIGHT' : 'DAY';
 }
 
-/* =========================================================
-   RIGHT PANEL
-   ========================================================= */
-function selectHotspot(id, opts){
-  opts = opts || {};
-  selectedId = id;
-  const h = hotspots.find(x=>x.id===id);
-  Object.values(markers).forEach(m=>m.getElement().classList.remove('selected'));
-  if(markers[id]) markers[id].getElement().classList.add('selected');
-  if(opts.fly !== false){
-    map.flyTo({center:h.coordinates, zoom:Math.max(map.getZoom(), 12.3), speed:0.9});
-  }
+// boot from whatever mode the markup already declares, so the very first
+// paint and the very first JS-driven state can never disagree
+applyTheme(dayNightToggle.classList.contains('is-night') ? 'night' : 'day');
 
-  document.getElementById('hsTitle').textContent = h.name;
-  document.getElementById('hsLoc').textContent = h.location;
-  const badge = document.getElementById('hsRiskBadge');
-  badge.textContent = h.severity + ' RISK';
-  badge.className = 'risk-badge' + (h.severity!=='HIGH' ? ' amber' : '');
-  const flame = document.getElementById('hsFlame');
-  flame.className = 'hs-flame' + (h.severity!=='HIGH' ? ' amber' : '');
-  document.getElementById('hsPower').innerHTML = h.thermalPower.toFixed(1) + ' <span style="font-size:12px;">MW</span>';
-  document.getElementById('hsTemp').innerHTML = h.temperature + ' <span style="font-size:12px;">K</span>';
-  document.getElementById('hsConf').textContent = h.confidence + '%';
-  document.getElementById('hsDetected').textContent = h.detectedAt;
-  document.getElementById('hsArea').textContent = '~' + h.area + ' km²';
-
-  document.getElementById('classificationList').innerHTML = h.classification.map(c=>`
-    <div class="class-row">
-      <div class="class-label"><span>${c.label}</span><b>${c.val}%</b></div>
-      <div class="class-bar-bg"><div class="class-bar" style="width:${c.val}%; background:${c.color};"></div></div>
-    </div>`).join('');
-
-  document.getElementById('activityList').innerHTML = h.activity.slice().reverse().map(a=>`
-    <div class="act-row"><span class="act-dot" style="background:${a.color};"></span>${a.text}<span class="act-time">${a.time}</span></div>`).join('');
-
-  const nearby = facilities
-    .map(f=>({...f, dist:haversine(h.coordinates, f.coordinates)}))
-    .filter(f=>f.dist <= 5)
-    .sort((a,b)=>a.dist-b.dist);
-  document.getElementById('facilitiesList').innerHTML = nearby.map(f=>`
-    <div class="fac-row" data-fac="${f.id}"><span class="fac-icon">${f.type==='Port'||f.type==='Shipyard'?'⚓':'🏭'}</span><span class="fac-name">${f.name}</span><span class="fac-dist">${f.dist.toFixed(1)} km</span></div>`).join('')
-    || '<div style="color:var(--text-muted); font-size:12.5px;">No facilities within 5 km.</div>';
-
-  document.querySelectorAll('#facilitiesList .fac-row').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      const f = facilities.find(x=>x.id===row.dataset.fac);
-      map.flyTo({center:f.coordinates, zoom:13.5});
-      Object.entries(facMarkers).forEach(([fid,m])=> m.getElement().classList.toggle('highlight', fid===f.id));
-      setTimeout(()=>{ if(facMarkers[f.id]) facMarkers[f.id].getElement().classList.remove('highlight'); }, 3000);
-    });
-  });
-
-  buildRiskAssessment(h);
-  buildWhyList(h, nearby);
-  buildImageryGrid(h);
-}
-
-function buildRiskAssessment(h){
-  const thermalPct = Math.min(100, Math.round((h.thermalPower/70)*100));
-  const spreadLabel = h.area > 3 ? 'HIGH' : (h.area > 2 ? 'MODERATE' : 'LOW');
-  const spreadPct = spreadLabel === 'HIGH' ? 82 : (spreadLabel === 'MODERATE' ? 52 : 26);
-  const rows = [
-    {label:'Thermal Intensity', val:thermalPct, tag:h.severity, color: h.severity==='HIGH' ? 'var(--red)' : 'var(--amber)'},
-    {label:'Confidence', val:h.confidence, tag:h.confidence+'%', color:'var(--green)'},
-    {label:'Spread Potential', val:spreadPct, tag:spreadLabel, color: spreadLabel==='HIGH' ? 'var(--red)' : (spreadLabel==='MODERATE' ? 'var(--amber)' : 'var(--green)')}
-  ];
-  document.getElementById('riskAssessment').innerHTML = rows.map(r=>`
-    <div class="class-row">
-      <div class="class-label"><span>${r.label}</span><b>${r.tag}</b></div>
-      <div class="class-bar-bg"><div class="class-bar" style="width:${r.val}%; background:${r.color};"></div></div>
-    </div>`).join('');
-}
-
-function buildWhyList(h, nearby){
-  const bullets = [];
-  bullets.push(h.severity === 'HIGH'
-    ? `Thermal output of ${h.thermalPower.toFixed(1)} MW exceeds the regional monitoring baseline for this zone.`
-    : `Thermal output of ${h.thermalPower.toFixed(1)} MW is elevated relative to the surrounding area's baseline.`);
-  bullets.push(`Located within a mapped industrial cluster classified as ${h.type.replace('-', ' ')}.`);
-  bullets.push(nearby.length
-    ? `${nearby.length} industrial ${nearby.length===1?'facility is':'facilities are'} located within 5 km, including ${nearby[0].name} (${nearby[0].dist.toFixed(1)} km).`
-    : 'No major industrial facilities detected within 5 km of this anomaly.');
-  bullets.push(`Detection confidence of ${h.confidence}% classifies this as a ${h.confidence>=90?'high-confidence':'moderate-confidence'} anomaly.`);
-  document.getElementById('whyList').innerHTML = bullets.map(b=>`<li>${b}</li>`).join('')
-    + '<li style="color:var(--text-muted); font-size:11px;">Analysis generated from a demo VIIRS dataset, for illustrative purposes only.</li>';
-}
-
-function buildImageryGrid(h){
-  const bands = ['M13', 'M11', 'I05'];
-  const times = [...new Set(h.activity.map(a=>a.time).concat([latestTimeStr(h)]))]
-    .sort((a,b)=> timeToMinutes(b) - timeToMinutes(a)).slice(0,4);
-  const grid = document.getElementById('imageryGrid');
-  grid.innerHTML = times.map((t,i)=>{
-    const hot = i % 2 === 0;
-    return `<div class="imagery-tile ${hot?'hot':''} ${i===0?'sel':''}">${t} · ${bands[i % bands.length]}</div>`;
-  }).join('');
-  grid.querySelectorAll('.imagery-tile').forEach(tile=>{
-    tile.addEventListener('click', ()=>{
-      grid.querySelectorAll('.imagery-tile').forEach(t=>t.classList.remove('sel'));
-      tile.classList.add('sel');
-    });
-  });
-  document.getElementById('imgHotspotName').textContent = h.name;
-  document.getElementById('imageryMeta').textContent = `Sensor: Suomi NPP / NOAA-20 VIIRS · Confidence ${h.confidence}% · Resolution 375 m`;
-}
-
-/* =========================================================
-   TABS
-   ========================================================= */
-document.querySelectorAll('.tab').forEach(tab=>{
-  tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    tab.classList.add('active');
-    ['layers','filters','time'].forEach(name=>{
-      document.getElementById('tab-'+name).classList.toggle('hidden', name !== tab.dataset.tab);
-    });
-  });
-});
-document.querySelectorAll('.rtab').forEach(tab=>{
-  tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.rtab').forEach(t=>t.classList.remove('active'));
-    tab.classList.add('active');
-    ['overview','imagery','facilities'].forEach(name=>{
-      document.getElementById('rtab-'+name).classList.toggle('hidden', name !== tab.dataset.rtab);
-    });
-  });
+dayNightToggle.addEventListener('click', () => applyTheme(currentTheme === 'night' ? 'day' : 'night'));
+dayNightToggle.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyTheme(currentTheme === 'night' ? 'day' : 'night'); }
 });
 
-/* =========================================================
-   LAYER TOGGLES (real MapLibre layers + markers)
-   ========================================================= */
-document.querySelectorAll('.layer-row').forEach(row=>{
-  row.addEventListener('click', ()=>{
-    const chk = row.querySelector('.chk');
-    const on = chk.classList.toggle('on');
-    chk.textContent = on ? '✓' : '';
-    row.classList.toggle('dim', !on);
-    const layer = row.dataset.layer;
-    const vis = on ? 'visible' : 'none';
+/* ---------- search ---------- */
 
-    if(layer === 'heat'){
-      Object.values(markers).forEach(m=> m.getElement().style.display = on ? '' : 'none');
-    } else if(layer === 'clusters'){
-      if(map.getLayer('clusters-fill')) map.setLayoutProperty('clusters-fill','visibility',vis);
-      if(map.getLayer('clusters-line')) map.setLayoutProperty('clusters-line','visibility',vis);
-    } else if(layer === 'facilities'){
-      Object.values(facMarkers).forEach(m=> m.getElement().style.display = on ? '' : 'none');
-    } else if(layer === 'population'){
-      if(map.getLayer('population-heat')) map.setLayoutProperty('population-heat','visibility',vis);
-    } else if(layer === 'roads'){
-      if(map.getLayer('nh16-line')) map.setLayoutProperty('nh16-line','visibility',vis);
-    } else if(layer === 'admin'){
-      if(map.getLayer('admin-line')) map.setLayoutProperty('admin-line','visibility',vis);
-    } else if(layer === 'water'){
-      if(map.getLayer('water-fill')) map.setLayoutProperty('water-fill','visibility',vis);
-    }
-  });
-});
-
-/* =========================================================
-   QUICK FILTERS
-   ========================================================= */
-document.querySelectorAll('.quick-filter[data-filter]').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    btn.classList.toggle('active');
-    const f = btn.dataset.filter;
-    if(activeFilters.has(f)) activeFilters.delete(f); else activeFilters.add(f);
-    applyThreshold();
-  });
-});
-
-/* =========================================================
-   RISK-LEVEL FILTERS (Filters tab)
-   ========================================================= */
-document.querySelectorAll('.quick-filter[data-risk]').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    btn.classList.toggle('active');
-    const r = btn.dataset.risk;
-    if(activeRiskFilters.has(r)) activeRiskFilters.delete(r); else activeRiskFilters.add(r);
-    applyThreshold();
-  });
-});
-
-/* =========================================================
-   CONFIDENCE THRESHOLD (real filtering)
-   ========================================================= */
-const sliderTrack = document.getElementById('sliderTrack');
-const sliderFill = document.getElementById('sliderFill');
-const sliderHandle = document.getElementById('sliderHandle');
-const thresholdVal = document.getElementById('thresholdVal');
-let sliderDragging = false;
-
-function setSlider(pct){
-  pct = Math.max(0, Math.min(100, pct));
-  confidenceThreshold = Math.round(pct);
-  sliderFill.style.width = pct + '%';
-  sliderHandle.style.left = pct + '%';
-  thresholdVal.textContent = confidenceThreshold + '%';
-  applyThreshold();
-}
-function passesAllFilters(h){
-  const passesConfidence = h.confidence >= confidenceThreshold;
-  const passesFilter = activeFilters.size === 0 || activeFilters.has(h.type);
-  const passesRisk = activeRiskFilters.size === 0 || activeRiskFilters.has(h.severity);
-  const passesReveal = !revealedSet || revealedSet.has(h.id);
-  return passesConfidence && passesFilter && passesRisk && passesReveal;
-}
-function applyThreshold(){
-  hotspots.forEach(h=>{
-    const visible = passesAllFilters(h);
-    if(markers[h.id]){
-      markers[h.id].getElement().classList.toggle('faded', !visible);
-      markers[h.id].getElement().style.pointerEvents = visible ? '' : 'none';
-    }
-  });
-  if(map.getLayer('clusters-fill')){
-    const visibleIds = hotspots.filter(passesAllFilters).map(h=>h.id);
-    const filterExpr = ['in', ['get','id'], ['literal', visibleIds]];
-    map.setFilter('clusters-fill', filterExpr);
-    map.setFilter('clusters-line', filterExpr);
-  }
-  updateHud();
-}
-function updateHud(){
-  const visible = hotspots.filter(passesAllFilters);
-  document.getElementById('hudActive').textContent = String(visible.length).padStart(2,'0');
-  document.getElementById('hudHigh').textContent = String(visible.filter(h=>h.severity==='HIGH').length).padStart(2,'0');
-}
-sliderTrack.addEventListener('mousedown', (e)=>{
-  sliderDragging = true;
-  const rect = sliderTrack.getBoundingClientRect();
-  setSlider(((e.clientX - rect.left) / rect.width) * 100);
-});
-window.addEventListener('mousemove', (e)=>{
-  if(!sliderDragging) return;
-  const rect = sliderTrack.getBoundingClientRect();
-  setSlider(((e.clientX - rect.left) / rect.width) * 100);
-});
-window.addEventListener('mouseup', ()=> sliderDragging = false);
-
-/* =========================================================
-   TIME TAB — real observation timeline & playback
-   ========================================================= */
-function timeToMinutes(t){ const [hh,mm] = t.split(':').map(Number); return hh*60+mm; }
-function latestTimeStr(h){ const m = h.detectedAt.match(/(\d{2}:\d{2})/); return m ? m[1] : '00:00'; }
-
-const timelineEvents = [];
-hotspots.forEach(h=> h.activity.forEach(a=> timelineEvents.push({time:a.time, text:a.text, color:a.color, hotspotId:h.id, hotspotName:h.name})));
-timelineEvents.sort((a,b)=> timeToMinutes(a.time) - timeToMinutes(b.time));
-
-let obsIndex = timelineEvents.length - 1; // default: fully revealed (live state)
-let revealedSet = null;                    // null => show everything (default live view)
-let playing = false;
-let playTimer = null;
-
-function timePct(t){
-  const mins = timeToMinutes(t), startMin = 18*60, endMin = 20*60;
-  return Math.max(0, Math.min(100, ((mins-startMin)/(endMin-startMin))*100));
-}
-function pctToObsIndex(pct){
-  const mins = 18*60 + (pct/100)*120;
-  let idx = -1;
-  for(let i=0;i<timelineEvents.length;i++){ if(timeToMinutes(timelineEvents[i].time) <= mins) idx = i; else break; }
-  return idx;
-}
-function renderObsLog(){
-  document.getElementById('obsLog').innerHTML = timelineEvents.map((ev,i)=>`
-    <div class="obs-item ${i===obsIndex?'current':''}"><span>${ev.time}</span><span>${ev.hotspotName} — ${ev.text}</span></div>`).join('');
-}
-function applyObsState(){
-  const timeFill = document.getElementById('timeFill');
-  const timeHandle = document.getElementById('timeHandle');
-  const cursor = document.getElementById('timeCursor');
-  let pct, label;
-  if(obsIndex < 0){ pct = 0; label = '18:00 IST'; }
-  else { pct = timePct(timelineEvents[obsIndex].time); label = timelineEvents[obsIndex].time + ' IST'; }
-  timeFill.style.width = pct + '%';
-  timeHandle.style.left = pct + '%';
-  cursor.textContent = label;
-
-  if(obsIndex >= timelineEvents.length - 1 && !playing){
-    revealedSet = null; // fully caught up -> treat as live/default state
-  } else {
-    revealedSet = new Set();
-    for(let i=0;i<=obsIndex;i++) revealedSet.add(timelineEvents[i].hotspotId);
-  }
-  applyThreshold();
-  renderObsLog();
-  renderLiveFeed(revealedSet);
-}
-function startPlayback(){
-  playing = true;
-  document.getElementById('playBtn').classList.add('playing');
-  document.getElementById('playIcon').textContent = '⏸';
-  document.getElementById('playLabel').textContent = 'PAUSE';
-  if(obsIndex >= timelineEvents.length - 1) obsIndex = -1;
-  applyObsState();
-  playTimer = setInterval(()=>{
-    obsIndex++;
-    if(obsIndex >= timelineEvents.length){ stopPlayback(); applyObsState(); return; }
-    applyObsState();
-  }, 1400);
-}
-function stopPlayback(){
-  playing = false;
-  clearInterval(playTimer);
-  document.getElementById('playBtn').classList.remove('playing');
-  document.getElementById('playIcon').textContent = '▶';
-  document.getElementById('playLabel').textContent = 'PLAY';
-}
-document.getElementById('playBtn').addEventListener('click', ()=>{
-  playing ? stopPlayback() : startPlayback();
-});
-
-const timeTrack = document.getElementById('timeTrack');
-let timeDragging = false;
-function scrub(pct){ obsIndex = pctToObsIndex(Math.max(0, Math.min(100, pct))); applyObsState(); }
-timeTrack.addEventListener('mousedown', (e)=>{
-  timeDragging = true; stopPlayback();
-  const rect = timeTrack.getBoundingClientRect();
-  scrub(((e.clientX - rect.left) / rect.width) * 100);
-});
-window.addEventListener('mousemove', (e)=>{
-  if(!timeDragging) return;
-  const rect = timeTrack.getBoundingClientRect();
-  scrub(((e.clientX - rect.left) / rect.width) * 100);
-});
-window.addEventListener('mouseup', ()=> timeDragging = false);
-renderObsLog();
-
-/* =========================================================
-   MAP VIEW STYLE PRESETS
-   ========================================================= */
-document.querySelectorAll('.mv-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('.mv-btn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    applyStylePreset(btn.dataset.style);
-  });
-});
-
-/* =========================================================
-   DAY / NIGHT toggle click (theme + map style defined near map init)
-   ========================================================= */
-dayNightToggle.addEventListener('click', ()=>{
-  applyTheme(currentTheme === 'night' ? 'day' : 'night');
-});
-dayNightToggle.addEventListener('keydown', (e)=>{
-  if(e.key === 'Enter' || e.key === ' '){
-    e.preventDefault();
-    applyTheme(currentTheme === 'night' ? 'day' : 'night');
-  }
-});
-
-/* =========================================================
-   THUMBNAIL EXPAND + VIEW ALL ACTIVITY
-   ========================================================= */
-document.getElementById('expandThumb').addEventListener('click', (e)=>{
-  const thumb = e.currentTarget.closest('.block').querySelector('.thumb');
-  thumb.classList.toggle('thumb-zoomed');
-});
-document.getElementById('viewAllActivity').addEventListener('click', (e)=>{
-  e.preventDefault();
-  document.querySelector('.nav a[data-nav="Incidents"]').click();
-});
-document.querySelector('.icon-btn').addEventListener('click', ()=>{
-  document.querySelector('.nav a[data-nav="Incidents"]').click();
-});
-
-/* =========================================================
-   COLLAPSE / CLOSE
-   ========================================================= */
-document.getElementById('collapseBtn').addEventListener('click', ()=>{
-  document.getElementById('leftPanel').classList.add('collapsed');
-  document.getElementById('panelReopen').classList.add('show');
-  setTimeout(()=> map.resize(), 200);
-});
-document.getElementById('panelReopen').addEventListener('click', ()=>{
-  document.getElementById('leftPanel').classList.remove('collapsed');
-  document.getElementById('panelReopen').classList.remove('show');
-  setTimeout(()=> map.resize(), 200);
-});
-document.getElementById('closePanel').addEventListener('click', ()=>{
-  document.querySelector('.right').classList.toggle('hidden');
-  setTimeout(()=> map.resize(), 50);
-});
-
-/* =========================================================
-   LIVE FEED (data-driven, same dataset as the map)
-   ========================================================= */
-function renderLiveFeed(filterSet){
-  const list = filterSet ? hotspots.filter(h=>filterSet.has(h.id)) : hotspots;
-  const sorted = list.slice().sort((a,b)=> timeToMinutes(latestTimeStr(b)) - timeToMinutes(latestTimeStr(a)));
-  const container = document.getElementById('liveFeedItems');
-  container.innerHTML = sorted.map(h=>`
-    <div class="status-item" data-select="${h.id}">● ${latestTimeStr(h)} <b>${h.name}</b> – ${h.severity==='HIGH'?'High':'Moderate'} thermal activity (${h.thermalPower.toFixed(1)} MW)</div>`).join('')
-    || '<span style="color:var(--text-muted);">No incidents in the current observation window.</span>';
-  container.querySelectorAll('.status-item[data-select]').forEach(item=>{
-    item.addEventListener('click', ()=> goToLiveMapAndSelect(item.dataset.select));
-  });
-}
-function goToLiveMapAndSelect(id){
-  document.querySelector('.nav a[data-nav="Live Map"]').click();
-  document.querySelector('.right').classList.remove('hidden');
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.querySelector('.tab[data-tab="layers"]').classList.add('active');
-  ['layers','filters','time'].forEach(name=> document.getElementById('tab-'+name).classList.toggle('hidden', name!=='layers'));
-  setTimeout(()=> selectHotspot(id), 60);
-}
-renderLiveFeed(null);
-
-/* =========================================================
-   SEARCH (place names + lat/lng, flyTo)
-   ========================================================= */
 const searchInput = document.getElementById('searchInput');
 const searchHint = document.getElementById('searchHint');
 const searchClear = document.getElementById('searchClear');
@@ -790,160 +325,312 @@ const searchHintDefault = searchHint.textContent;
 function updateSearchClearVisibility(){
   searchClear.style.display = searchInput.value.length ? 'flex' : 'none';
 }
-
 function clearSearch(focusAfter){
   searchInput.value = '';
   updateSearchClearVisibility();
   searchHint.textContent = searchHintDefault;
   searchHint.classList.remove('show');
-  if(searchMarker){ searchMarker.remove(); searchMarker = null; }
-  if(focusAfter) searchInput.focus();
+  if (focusAfter) searchInput.focus();
 }
-
-searchInput.addEventListener('focus', ()=> searchHint.classList.add('show'));
-searchInput.addEventListener('blur', ()=> setTimeout(()=>searchHint.classList.remove('show'), 150));
+searchInput.addEventListener('focus', () => searchHint.classList.add('show'));
+searchInput.addEventListener('blur', () => setTimeout(() => searchHint.classList.remove('show'), 150));
 searchInput.addEventListener('input', updateSearchClearVisibility);
+searchClear.addEventListener('click', () => clearSearch(true));
 
-searchClear.addEventListener('click', ()=> clearSearch(true));
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { clearSearch(false); searchInput.blur(); return; }
+  if (e.key !== 'Enter') return;
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) { clearSearch(true); return; }
 
-searchInput.addEventListener('keydown', (e)=>{
-  if(e.key === 'Escape'){ clearSearch(false); searchInput.blur(); return; }
-  if(e.key !== 'Enter') return;
-  const q = e.target.value.trim();
-  if(!q){ clearSearch(true); return; }
-  const qLower = q.toLowerCase();
-
-  const latLngMatch = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-  let target = null;
-
-  if(latLngMatch){
-    const lat = parseFloat(latLngMatch[1]);
-    const lng = parseFloat(latLngMatch[2]);
-    target = [lng, lat];
-  } else if(places[qLower]){
-    target = places[qLower];
-  } else {
-    const hotspotMatch = hotspots.find(h => h.name.toLowerCase().includes(qLower));
-    if(hotspotMatch){ target = hotspotMatch.coordinates; if(hotspotMatch){ selectHotspot(hotspotMatch.id); document.querySelector('.right').classList.remove('hidden'); } }
-    else {
-      const placeKey = Object.keys(places).find(k => k.includes(qLower) || qLower.includes(k));
-      if(placeKey) target = places[placeKey];
-    }
+  // try a hotspot name/location match first
+  const hotspotMatch = HOTSPOTS.find(h =>
+    h.name.toLowerCase().includes(q) || h.location.toLowerCase().includes(q));
+  if (hotspotMatch) {
+    selectHotspot(hotspotMatch.id);
+    flashLocation(hotspotMatch.x, hotspotMatch.y);
+    showToast(`Found: ${hotspotMatch.name}`);
+    searchHint.textContent = searchHintDefault;
+    return;
   }
 
-  if(target){
-    map.flyTo({center:target, zoom:13});
-    if(searchMarker) searchMarker.remove();
-    if(mapLibLoaded){
-      const el = document.createElement('div');
-      el.className = 'search-marker';
-      searchMarker = new maplibregl.Marker({element:el, anchor:'bottom'}).setLngLat(target).addTo(map);
-    }
+  // then a place label
+  const placeMatch = PLACES.find(p => p.name.toLowerCase().includes(q));
+  if (placeMatch) {
+    flashLocation(placeMatch.x, placeMatch.y);
+    showToast(`Centered on ${placeMatch.name}`);
+    searchHint.textContent = searchHintDefault;
+    return;
+  }
+
+  // coordinate search "lat, lng"
+  const coordMatch = q.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
+  if (coordMatch) {
+    showToast(`No hotspot at ${coordMatch[1]}, ${coordMatch[2]}`);
+    searchHint.textContent = searchHintDefault;
+    return;
+  }
+
+  searchHint.textContent = `No match for "${e.target.value.trim()}"`;
+  searchHint.classList.add('show');
+});
+
+function flashLocation(x, y){
+  const ring = document.createElement('div');
+  ring.style.position = 'absolute';
+  ring.style.left = x + '%';
+  ring.style.top = y + '%';
+  ring.style.width = '30px';
+  ring.style.height = '30px';
+  ring.style.marginLeft = '-15px';
+  ring.style.marginTop = '-15px';
+  ring.style.borderRadius = '50%';
+  ring.style.border = '2px solid var(--orange)';
+  ring.style.zIndex = '45';
+  ring.style.pointerEvents = 'none';
+  ring.style.animation = 'pulseRing 1s ease-out 2';
+  markersLayer.appendChild(ring);
+  setTimeout(() => ring.remove(), 2000);
+}
+
+/* ---------- notification bell ---------- */
+
+const bellBtn = document.getElementById('bellBtn');
+const bellPanel = document.getElementById('bellPanel');
+const bellDot = document.getElementById('bellDot');
+bellBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  bellPanel.classList.toggle('show');
+  if (bellPanel.classList.contains('show')) bellDot.style.display = 'none';
+});
+document.addEventListener('click', (e) => {
+  if (!bellBtn.contains(e.target)) bellPanel.classList.remove('show');
+});
+
+/* ---------- tool rail + popovers ---------- */
+
+const popovers = {
+  layers: document.getElementById('layersPopover'),
+  filter: document.getElementById('filterPopover'),
+  chart: document.getElementById('chartPopover'),
+};
+const toolButtons = {
+  layers: document.getElementById('toolLayers'),
+  filter: document.getElementById('toolFilter'),
+  chart: document.getElementById('toolChart'),
+};
+
+function closeAllPopovers(exceptKey){
+  Object.keys(popovers).forEach(key => {
+    if (key === exceptKey) return;
+    popovers[key].classList.remove('show');
+    toolButtons[key].classList.remove('active');
+  });
+}
+function togglePopover(key){
+  const isShowing = popovers[key].classList.contains('show');
+  closeAllPopovers(key);
+  popovers[key].classList.toggle('show', !isShowing);
+  toolButtons[key].classList.toggle('active', !isShowing);
+}
+
+// layers icon is visually active (highlighted) to match the reference,
+// but its popover starts closed
+toolButtons.layers.classList.add('active');
+
+document.getElementById('toolLayers').addEventListener('click', (e) => { e.stopPropagation(); togglePopover('layers'); });
+document.getElementById('toolFilter').addEventListener('click', (e) => { e.stopPropagation(); togglePopover('filter'); });
+document.getElementById('toolChart').addEventListener('click', (e) => {
+  e.stopPropagation();
+  renderMiniBars();
+  togglePopover('chart');
+});
+document.getElementById('toolMenu').addEventListener('click', () => {
+  showToast('Menu: use the top navigation to switch sections');
+});
+document.getElementById('toolLocate').addEventListener('click', () => {
+  const h = HOTSPOTS.find(x => x.id === selectedId) || HOTSPOTS[0];
+  flashLocation(h.x, h.y);
+  showToast('Recentered on ' + h.name);
+});
+document.getElementById('toolFullscreen').addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.getElementById('app').requestFullscreen?.().catch(() => showToast('Fullscreen not available'));
   } else {
-    searchHint.textContent = `No match for "${q}". Try a place name or "lat, lng".`;
-    searchHint.classList.add('show');
+    document.exitFullscreen?.();
   }
 });
 
-/* =========================================================
-   RESET VIEWPORT
-   ========================================================= */
-document.getElementById('resetViewport').addEventListener('click', ()=>{
-  map.flyTo({center:[83.2050, 17.6600], zoom:10.6, bearing:0, pitch:0});
+document.addEventListener('click', (e) => {
+  const clickedInsidePopover = Object.values(popovers).some(p => p.contains(e.target));
+  const clickedToolBtn = Object.values(toolButtons).some(b => b.contains(e.target));
+  if (!clickedInsidePopover && !clickedToolBtn) closeAllPopovers();
 });
 
-/* =========================================================
-   NAV — real page switching
-   ========================================================= */
-const otherPages = ['Incidents','Analytics','Satellites','Reports'];
-document.querySelectorAll('.nav a').forEach(a=>{
-  a.addEventListener('click', ()=>{
-    document.querySelectorAll('.nav a').forEach(n=>n.classList.remove('active'));
-    a.classList.add('active');
-    const page = a.dataset.nav;
-    document.querySelector('.main').classList.toggle('hidden', page !== 'Live Map');
-    otherPages.forEach(p=>{
-      const el = document.getElementById('page-'+p);
-      if(el) el.classList.toggle('hidden', page !== p);
+document.querySelectorAll('.layer-row input').forEach(input => {
+  input.addEventListener('change', () => {
+    layerVisibility[input.dataset.layer] = input.checked;
+    if (input.dataset.layer === 'roads') {
+      document.querySelector('.map-roads').style.display = input.checked ? '' : 'none';
+    }
+    if (input.dataset.layer === 'labels') {
+      document.querySelectorAll('.place-label, .road-badge, .port-label').forEach(l => {
+        l.style.display = input.checked ? '' : 'none';
+      });
+    }
+    if (input.dataset.layer === 'clusters') {
+      document.getElementById('clusterPoly').style.display = input.checked ? '' : 'none';
+    }
+    renderMarkers();
+  });
+});
+
+const confSlider = document.getElementById('confSlider');
+const confValue = document.getElementById('confValue');
+confSlider.addEventListener('input', () => {
+  minConfidence = Number(confSlider.value);
+  confValue.textContent = minConfidence + '%';
+  renderMarkers();
+});
+
+function renderMiniBars(){
+  const cats = [
+    { key: 'fire', label: 'Fire', color: 'var(--red)' },
+    { key: 'chemical', label: 'Chemical', color: 'var(--purple)' },
+    { key: 'moderate', label: 'Moderate', color: 'var(--amber)' },
+    { key: 'normal', label: 'Normal', color: 'var(--green)' },
+    { key: 'facilities', label: 'Facilities', color: 'var(--blue)' },
+  ];
+  const max = Math.max(...cats.map(c => HOTSPOTS.filter(h => h.category === c.key).length), 1);
+  const box = document.getElementById('miniBars');
+  box.innerHTML = cats.map(c => {
+    const count = HOTSPOTS.filter(h => h.category === c.key).length;
+    const pct = (count / max) * 100;
+    return `<div class="mini-bar-row">
+      <span class="lbl">${c.label}</span>
+      <span class="track"><span class="fill" style="width:${pct}%; background:${c.color};"></span></span>
+      <span class="val">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- detail card ---------- */
+
+document.getElementById('detailClose').addEventListener('click', () => {
+  document.getElementById('detailCard').classList.add('hidden');
+});
+document.getElementById('viewDetailsBtn').addEventListener('click', () => {
+  document.getElementById('detailExtra').classList.toggle('show');
+});
+
+/* ---------- legend / filter bar ---------- */
+
+const legendIndicator = document.getElementById('legendIndicator');
+function positionLegendIndicator(){
+  const active = document.querySelector('#legendOptions .legend-opt.active');
+  if (!active || !legendIndicator) return;
+  legendIndicator.style.left = active.offsetLeft + 'px';
+  legendIndicator.style.width = active.offsetWidth + 'px';
+}
+
+document.getElementById('legendBar').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-filter]');
+  if (!btn) return;
+  activeFilter = btn.dataset.filter;
+
+  document.querySelectorAll('#legendOptions [data-filter]').forEach(b => {
+    b.classList.toggle('active', b === btn);
+    b.classList.toggle('dimmed', activeFilter !== 'all' && b !== btn);
+  });
+  positionLegendIndicator();
+  renderMarkers();
+});
+
+window.addEventListener('resize', positionLegendIndicator);
+
+/* ---------- top nav ---------- */
+
+const navIndicator = document.getElementById('navIndicator');
+function positionNavIndicator(){
+  const active = document.querySelector('#mainNav a.active');
+  if (!active || !navIndicator) return;
+  navIndicator.style.left = active.offsetLeft + 'px';
+  navIndicator.style.width = active.offsetWidth + 'px';
+}
+
+document.getElementById('mainNav').addEventListener('click', (e) => {
+  const link = e.target.closest('a');
+  if (!link) return;
+  e.preventDefault();
+  const page = link.dataset.page;
+  const newStage = document.getElementById('page-' + page);
+  const oldStage = document.querySelector('.stage:not(.hidden)');
+
+  document.querySelectorAll('#mainNav a').forEach(a => a.classList.toggle('active', a === link));
+  positionNavIndicator();
+
+  if (!newStage || newStage === oldStage) return;
+
+  if (!oldStage || prefersReducedMotion) {
+    if (oldStage) oldStage.classList.add('hidden');
+    newStage.classList.remove('hidden');
+    return;
+  }
+
+  // exit the current page first, then swap and enter the new one —
+  // the map (and every other page) stays mounted the whole time, only
+  // its visibility and a short opacity/translateX transition change
+  oldStage.classList.remove('stage-enter');
+  oldStage.classList.add('stage-exit');
+
+  setTimeout(() => {
+    oldStage.classList.add('hidden');
+    oldStage.classList.remove('stage-exit');
+    newStage.classList.remove('hidden');
+    newStage.classList.add('stage-enter');
+    newStage.addEventListener('animationend', function onEnterDone(ev){
+      if (ev.animationName !== 'pageEnter') return;
+      newStage.classList.remove('stage-enter');
+      newStage.removeEventListener('animationend', onEnterDone);
     });
-    if(page === 'Live Map') setTimeout(()=> map.resize(), 60);
-    else if(page === 'Incidents') renderIncidentsPage();
-    else if(page === 'Analytics') renderAnalyticsPage();
-    else if(page === 'Reports') renderReportsPage();
-    else if(page === 'Satellites') renderSatellitesPage();
-  });
+  }, 140);
 });
 
-function renderIncidentsPage(){
-  const rows = hotspots.slice().sort((a,b)=> timeToMinutes(latestTimeStr(b)) - timeToMinutes(latestTimeStr(a)));
-  document.getElementById('incidentsTableBody').innerHTML = rows.map(h=>`
-    <tr data-id="${h.id}">
-      <td>${latestTimeStr(h)} IST</td>
-      <td style="color:var(--text-primary); font-family:var(--sans);">${h.name}</td>
-      <td>${h.type.replace('-', ' ')}</td>
-      <td>${h.thermalPower.toFixed(1)} MW</td>
-      <td>${h.confidence}%</td>
-      <td><span class="pill ${h.severity==='HIGH'?'red':'amber'}">${h.severity}</span></td>
-    </tr>`).join('');
-  document.querySelectorAll('#incidentsTableBody tr').forEach(row=>{
-    row.addEventListener('click', ()=> goToLiveMapAndSelect(row.dataset.id));
-  });
+window.addEventListener('resize', positionNavIndicator);
+
+/* ---------- toast ---------- */
+
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-function renderAnalyticsPage(){
-  document.getElementById('anTotal').textContent = hotspots.length;
-  document.getElementById('anHigh').textContent = hotspots.filter(h=>h.severity==='HIGH').length;
-  document.getElementById('anMod').textContent = hotspots.filter(h=>h.severity!=='HIGH').length;
-  document.getElementById('anPower').textContent = hotspots.reduce((s,h)=>s+h.thermalPower,0).toFixed(1) + ' MW';
-  document.getElementById('anPeak').textContent = Math.max(...hotspots.map(h=>h.thermalPower)).toFixed(1) + ' MW';
-  document.getElementById('anConf').textContent = Math.round(hotspots.reduce((s,h)=>s+h.confidence,0)/hotspots.length) + '%';
+/* ---------- keyboard shortcut ⌘K / Ctrl+K ---------- */
 
-  const agg = {};
-  hotspots.forEach(h=> h.classification.forEach(c=>{ agg[c.label] = (agg[c.label]||0) + c.val; }));
-  const total = Object.values(agg).reduce((a,b)=>a+b,0) || 1;
-  document.getElementById('anBreakdown').innerHTML = '<div class="pc-title">By Classification</div>' +
-    Object.entries(agg).map(([label,val])=>`<div class="pc-row"><span>${label}</span><b style="color:var(--text-primary)">${Math.round(val/total*100)}%</b></div>`).join('');
-}
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    searchInput.focus();
+  }
+});
 
-function renderReportsPage(){
-  document.getElementById('reportsGrid').innerHTML = hotspots.map(h=>`
-    <div class="page-card">
-      <div class="pc-title">${h.name} <span class="pill ${h.severity==='HIGH'?'red':'amber'}">${h.severity}</span></div>
-      <div class="pc-row"><span>Detected</span><span>${h.detectedAt}</span></div>
-      <div class="pc-row"><span>Thermal Power</span><span>${h.thermalPower.toFixed(1)} MW</span></div>
-      <div class="pc-row"><span>Confidence</span><span>${h.confidence}%</span></div>
-      <div class="pc-row"><span>Area</span><span>~${h.area} km²</span></div>
-      <button class="reset-link" data-id="${h.id}" style="margin-top:10px; color:var(--orange);">↗ Open on Live Map</button>
-    </div>`).join('');
-  document.querySelectorAll('#reportsGrid button[data-id]').forEach(btn=>{
-    btn.addEventListener('click', ()=> goToLiveMapAndSelect(btn.dataset.id));
-  });
-}
+/* ---------- live status ticking ---------- */
 
-function renderSatellitesPage(){
-  const times = hotspots.map(h=>latestTimeStr(h)).sort((a,b)=>timeToMinutes(a)-timeToMinutes(b));
-  document.getElementById('satPass1').textContent = times[times.length-1] + ' IST';
-  document.getElementById('satPass2').textContent = times[0] + ' IST';
-}
-
-/* =========================================================
-   CLOCK
-   ========================================================= */
-function updateClock(){
+function tickClock(){
   const now = new Date();
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const hh = String(now.getHours()).padStart(2,'0');
-  const mm = String(now.getMinutes()).padStart(2,'0');
-  document.getElementById('clock').textContent = days[now.getDay()] + ', ' + hh + ':' + mm;
-  if(!revealedSet){ document.getElementById('hudTime').textContent = hh + ':' + mm + ' IST'; }
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  document.getElementById('lastScan').textContent = `${h}:${m} IST`;
 }
-updateClock();
-setInterval(updateClock, 30000);
+setInterval(tickClock, 30000);
 
-map.on('move', ()=>{
-  const c = map.getCenter();
-  document.getElementById('coordReadout').textContent =
-    `LAT ${c.lat.toFixed(4)} · LNG ${c.lng.toFixed(4)} · Z ${map.getZoom().toFixed(1)}`;
-});
+/* ---------- init ---------- */
 
-window.addEventListener('resize', ()=> map.resize());
+renderMarkers();
+selectHotspot(selectedId);
+requestAnimationFrame(positionNavIndicator);
+requestAnimationFrame(positionLegendIndicator);
