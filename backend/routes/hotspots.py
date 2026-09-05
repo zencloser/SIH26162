@@ -1,24 +1,30 @@
-import json
-from pathlib import Path
+from fastapi import APIRouter, Query
 
-from fastapi import APIRouter
-
-from models.event import Event
+from services.firms_service import get_firms_data
 
 
 router = APIRouter()
 
 
-DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "sample_events.json"
-
-
 @router.get("/api/hotspots")
-def get_hotspots():
-    with open(DATA_FILE, "r") as file:
-        data = json.load(file)
+def get_hotspots(
+    live: bool = Query(False)
+):
+    if live:
+        detections = get_firms_data(
+            west=68.0,
+            south=6.0,
+            east=97.0,
+            north=37.0,
+            days=1
+        )
 
-    events = [Event(**event) for event in data]
+        return {
+            "source": "NASA FIRMS",
+            "events": detections
+        }
 
     return {
-        "events": events
+        "source": "mock",
+        "events": []
     }

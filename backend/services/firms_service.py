@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import hashlib
 from datetime import datetime, timezone
 
 import requests
@@ -58,6 +59,9 @@ def get_firms_data(
         ).replace(tzinfo=timezone.utc)
 
         detection = {
+            "id": hashlib.sha256(
+                f"{row['latitude']}_{row['longitude']}_{row['acq_date']}_{row['acq_time']}_{row['satellite']}".encode()
+            ).hexdigest()[:16],
             "latitude": float(row["latitude"]),
             "longitude": float(row["longitude"]),
             "timestamp": timestamp,

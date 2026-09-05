@@ -10,6 +10,7 @@ class Location(BaseModel):
 
 
 class Detection(BaseModel):
+    id: str
     timestamp: datetime
 
     source: str = "VIIRS"
