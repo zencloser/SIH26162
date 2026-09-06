@@ -5,6 +5,7 @@ from routes.hotspots import router as hotspots_router
 from routes.incidents import router as incidents_router
 from routes.history import router as history_router
 from routes.statistics import router as statistics_router
+from services.live_event_store import initialize_database
 
 
 app = FastAPI(
@@ -13,6 +14,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
+initialize_database()
 
 # Allow frontend to communicate with backend
 app.add_middleware(

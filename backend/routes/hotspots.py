@@ -10,7 +10,12 @@ from services.osm_service import (
 from services.ml_service import predict_classification
 from services.persistence_service import calculate_persistence
 from services.risk_service import calculate_risk
-from services.live_event_store import save_event
+from services.live_event_store import (
+    save_event,
+    get_observations_as_datetime,
+    combine_observations,
+    get_all_events,
+)
 
 
 router = APIRouter()
@@ -20,6 +25,7 @@ router = APIRouter()
 def get_hotspots(
     live: bool = Query(False),
     limit: int | None = Query(None, ge=1, le=50),
+    days: int = Query(3, ge=1, le=5),
     west: float = Query(68.0),
     south: float = Query(6.0),
     east: float = Query(97.0),
@@ -36,13 +42,31 @@ def get_hotspots(
             south=south,
             east=east,
             north=north,
-            days=1
+            days=days
         )
 
         # Keep all detections for analysis.
         # The limit should only control how many events
         # are returned to the frontend.
         all_detections = detections
+
+        # --------------------------------------------------
+        # 1b. Bring in historical observations from SQLite so
+        # persistence reflects real multi-day activity, not just
+        # what FIRMS happened to return in this one request.
+        #
+        # Fetched once per request (not once per detection) —
+        # persistence_service.calculate_persistence() already does its
+        # own 500m filtering per detection against whatever list it's
+        # given, so one combined list serves every detection below.
+        # --------------------------------------------------
+
+        historical_observations = get_observations_as_datetime()
+
+        combined_observations = combine_observations(
+            historical_observations,
+            all_detections
+        )
 
         if limit:
             detections = detections[:limit]
@@ -74,33 +98,25 @@ def get_hotspots(
             )
 
             # --------------------------------------------------
-            # 4. Prepare features for classification
+            # 4. Persistence
             # --------------------------------------------------
 
-            features = {
-                "frp": detection["frp"],
-                "brightness": detection["brightness"],
-                "industrial_area": context["industrial_area"]
-            }
+            persistence = calculate_persistence(            
+                current_latitude=latitude,
+                current_longitude=longitude,
+                observations=combined_observations
+            )
 
             # --------------------------------------------------
             # 5. Classification
             # --------------------------------------------------
 
             classification = predict_classification(
-                features
+                detection=detection,
+                persistence=persistence,
+                context=context,
+                observations=combined_observations
             )
-
-            # --------------------------------------------------
-            # 6. Persistence
-            # --------------------------------------------------
-
-            persistence = calculate_persistence(
-                current_latitude=latitude,
-                current_longitude=longitude,
-                observations=all_detections
-            )
-
             # --------------------------------------------------
             # 7. Risk
             # --------------------------------------------------
@@ -150,10 +166,10 @@ def get_hotspots(
         }
 
     # ------------------------------------------------------
-    # Mock mode
+    # Cached mode - real stored events, not mock data
     # ------------------------------------------------------
 
     return {
-        "source": "mock",
-        "events": []
+        "source": "SQLite cached events",
+        "events": get_all_events()
     }
