@@ -55,23 +55,25 @@ function facilityFeature(f) {
 }
 
 async function fetchHotspots() {
-  const raw = [
-    { id: 'parawada', name: 'Parawada Industrial Cluster', location: 'Visakhapatnam, Andhra Pradesh',
-      coordinates: [83.2233, 17.6027], confidence: 81, severity: 'critical', category: 'industrial', status: 'Active',
-      timestamp: '2026-09-04T22:41:00+05:30', thermal: 32.6, temp: 326, riskScore: 87, area: '~4.2 km²' },
-    { id: 'atchutapuram-sez', name: 'Atchutapuram SEZ', location: 'Atchutapuram, Andhra Pradesh',
-      coordinates: [83.070, 17.520], confidence: 69, severity: 'high', category: 'industrial', status: 'Active',
-      timestamp: '2026-09-04T22:30:00+05:30', thermal: 21.3, temp: 318, riskScore: 74, area: '~3.1 km²' },
-    { id: 'port-watch', name: 'Port Approach Thermal Watch', location: 'Visakhapatnam Port, Andhra Pradesh',
-      coordinates: [83.290, 17.685], confidence: 55, severity: 'medium', category: 'others', status: 'Monitoring',
-      timestamp: '2026-09-04T22:05:00+05:30', thermal: 14.8, temp: 312, riskScore: 56, area: '~2.0 km²' },
-    { id: 'nakkapalli-chem', name: 'Nakkapalli Chemical Storage', location: 'Nakkapalli, Andhra Pradesh',
-      coordinates: [82.960, 17.560], confidence: 47, severity: 'medium', category: 'industrial', status: 'Monitoring',
-      timestamp: '2026-09-04T21:48:00+05:30', thermal: 9.7, temp: 308, riskScore: 42, area: '~1.4 km²' },
-    { id: 'anakapalle-sensor', name: 'Anakapalle Forest & Green Buffer', location: 'Anakapalle, Andhra Pradesh',
-      coordinates: [83.0037, 17.6910], confidence: 38, severity: 'low', category: 'natural', status: 'Monitoring',
-      timestamp: '2026-09-04T21:10:00+05:30', thermal: 4.1, temp: 301, riskScore: 24, area: '~0.6 km²' }
-  ].map(h => ({ ...h, riskRadiusKm: SEVERITY_RISK_KM[h.severity] }));
+  const response = await fetch('http://127.0.0.1:8000/api/hotspots');
+  const data = await response.json();
+
+  const raw = data.events.map(e => ({
+    id: e.id,
+    name: e.context.facility_name || `Thermal Anomaly · ${e.latitude.toFixed(2)}°N, ${e.longitude.toFixed(2)}°E`,
+    location: `${e.latitude.toFixed(3)}, ${e.longitude.toFixed(3)}`,
+    coordinates: [e.longitude, e.latitude],
+    confidence: Math.round(e.classification.confidence * 100),
+    severity: e.risk.severity,
+    category: e.context.industrial_area ? 'industrial' : (e.classification.label === 'unknown' ? 'others' : e.classification.label),
+    status: e.persistence.detection_count > 1 ? 'Monitoring' : 'Active',
+    timestamp: e.timestamp,
+    thermal: e.frp,
+    temp: e.brightness,
+    riskScore: e.risk.score,
+    area: null
+  })).map(h => ({ ...h, riskRadiusKm: SEVERITY_RISK_KM[h.severity] }));
+
   return featureCollection(raw.map(hotspotFeature));
 }
 
@@ -738,22 +740,7 @@ dayNightToggle.addEventListener('keydown', e => {
 /* ---------------------------------------------------------
    CONTROLS, SEARCH & POPOVERS
 --------------------------------------------------------- */
-const searchInput = document.getElementById('searchInput');
-const searchHint = document.getElementById('searchHint');
-const searchClear = document.getElementById('searchClear');
 
-searchInput.addEventListener('focus', () => searchHint.classList.add('show'));
-searchInput.addEventListener('blur', () => setTimeout(() => searchHint.classList.remove('show'), 150));
-searchInput.addEventListener('input', () => { searchClear.style.display = searchInput.value.length ? 'flex' : 'none'; });
-searchClear.addEventListener('click', () => { searchInput.value = ''; searchClear.style.display = 'none'; });
-
-searchInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const q = searchInput.value.trim().toLowerCase();
-    const match = agniraData.hotspots.features.find(f => f.properties.name.toLowerCase().includes(q));
-    if (match) { selectHotspot(match.properties.id, { fly: true }); showToast(`Focused: ${match.properties.name}`); }
-  }
-});
 
 const popovers = {
   layers: document.getElementById('layersPopover'),

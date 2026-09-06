@@ -710,3 +710,7 @@ body.mode-satellite-active .gl-map .maplibregl-canvas-container {
   .nav-timeline { max-width: 260px; }
   .status-right { display: none; }
 }
+
+.nav {
+  justify-content: flex-start;
+}
