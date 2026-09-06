@@ -1,488 +1,802 @@
 /* =========================================================
-   AGNIRA — Live Map
-   Data model + rendering + interactions.
-   Swap HOTSPOTS / PLACES with real API data without touching
-   any of the rendering or event-handling code below.
+   AGNIRA — Live Industrial Thermal Map
+   Watermark-free Tiles + Speedometer Risk Dial + Semantic GIS
 ========================================================= */
 
-const HOTSPOTS = [
-  {
-    id: 'parawada',
-    name: 'Parawada Industrial Cluster',
-    location: 'Visakhapatnam, Andhra Pradesh',
-    lat: 17.6027, lng: 83.2233,
-    x: 46.5, y: 48,          // position on the map, in % of map area
-    category: 'fire',        // fire | chemical | moderate | normal
-    risk: 'high',            // high | moderate | normal
-    status: 'Active',
-    thermal: 32.6, temp: 326, confidence: 81,
-    aiClass: 'Industrial Fire', aiPct: 62,
-    desc: 'Elevated thermal output within an industrial cluster. Multiple sources confirm anomaly.',
-    detected: '04 Sep 2026, 22:41 IST', area: '~4.2 km²', sat: 'Suomi NPP · VIIRS I-Band',
-    selected: true,
-    showTooltip: true
-  },
-  {
-    id: 'anakapalle-sensor',
-    name: 'Anakapalle Transformer Yard',
-    location: 'Anakapalle, Andhra Pradesh',
-    lat: 17.6910, lng: 83.0037,
-    x: 44, y: 20,
-    category: 'watch',
-    risk: 'normal',
-    status: 'Monitoring',
-    thermal: 4.1, temp: 301, confidence: 38,
-    aiClass: 'No Anomaly', aiPct: 12,
-    desc: 'Routine thermal signature consistent with grid infrastructure. No action required.',
-    detected: '04 Sep 2026, 21:10 IST', area: '~0.6 km²', sat: 'NOAA-20 · VIIRS I-Band'
-  },
-  {
-    id: 'nh16-facility',
-    name: 'NH16 Roadside Facility',
-    location: 'National Highway 16, Visakhapatnam',
-    lat: 17.660, lng: 83.140,
-    x: 57.5, y: 27,
-    category: 'facilities',
-    risk: 'normal',
-    status: 'Operational',
-    thermal: 6.4, temp: 305, confidence: 44,
-    aiClass: 'Facility Baseline', aiPct: 18,
-    desc: 'Registered industrial facility operating within normal thermal bounds.',
-    detected: '04 Sep 2026, 20:55 IST', area: '~1.1 km²', sat: 'Suomi NPP · VIIRS I-Band'
-  },
-  {
-    id: 'port-watch',
-    name: 'Port Approach Thermal Watch',
-    location: 'Visakhapatnam Port, Andhra Pradesh',
-    lat: 17.685, lng: 83.290,
-    x: 69, y: 32,
-    category: 'moderate',
-    risk: 'moderate',
-    status: 'Monitoring',
-    thermal: 14.8, temp: 312, confidence: 55,
-    aiClass: 'Flaring Activity', aiPct: 41,
-    desc: 'Intermittent flaring consistent with port refinery operations. Being tracked for persistence.',
-    detected: '04 Sep 2026, 22:05 IST', area: '~2.0 km²', sat: 'NOAA-21 · VIIRS I-Band'
-  },
-  {
-    id: 'nakkapalli-chem',
-    name: 'Nakkapalli Chemical Storage',
-    location: 'Nakkapalli, Andhra Pradesh',
-    lat: 17.560, lng: 82.960,
-    x: 23, y: 65,
-    category: 'chemical',
-    risk: 'moderate',
-    status: 'Monitoring',
-    thermal: 9.7, temp: 308, confidence: 47,
-    aiClass: 'Chemical Signature', aiPct: 34,
-    desc: 'Thermal profile consistent with chemical storage venting. No fire signature detected.',
-    detected: '04 Sep 2026, 21:48 IST', area: '~1.4 km²', sat: 'Suomi NPP · VIIRS M-Band'
-  },
-  {
-    id: 'atchutapuram-sez',
-    name: 'Atchutapuram SEZ',
-    location: 'Atchutapuram, Andhra Pradesh',
-    lat: 17.520, lng: 83.070,
-    x: 43, y: 79,
-    category: 'facilities',
-    risk: 'high',
-    status: 'Active',
-    thermal: 21.3, temp: 318, confidence: 69,
-    aiClass: 'Industrial Fire', aiPct: 47,
-    desc: 'Sustained thermal output above baseline for this SEZ zone. Recommend field verification.',
-    detected: '04 Sep 2026, 22:30 IST', area: '~3.1 km²', sat: 'NOAA-20 · VIIRS I-Band'
-  },
-  {
-    id: 'parawada-fac-2',
-    name: 'Parawada Facility Block B',
-    location: 'Parawada, Visakhapatnam',
-    lat: 17.598, lng: 83.210,
-    x: 55, y: 55,
-    category: 'facilities',
-    risk: 'normal',
-    status: 'Operational',
-    thermal: 5.9, temp: 303, confidence: 33,
-    aiClass: 'Facility Baseline', aiPct: 15,
-    desc: 'Registered industrial facility operating within normal thermal bounds.',
-    detected: '04 Sep 2026, 21:20 IST', area: '~0.9 km²', sat: 'Suomi NPP · VIIRS I-Band'
-  },
-];
+const AOI = { minLat: 17.46, minLng: 82.90, maxLat: 17.80, maxLng: 83.36 };
+const MAP_CENTER = [83.19, 17.645];
+const MAP_ZOOM = 10.6;
 
-const PLACES = [
-  { name: 'Visakhapatnam', x: 61, y: 44 },
-  { name: 'Anakapalle', x: 17, y: 21 },
-  { name: 'Nakkapalli', x: 11, y: 66 },
-  { name: 'Parawada', x: 20.5, y: 59 },
-  { name: 'Atchutapuram', x: 34, y: 75 },
-  { name: 'Visakhapatnam Port', x: 62, y: 36 },
-  { name: 'NH16', x: 48.5, y: 22.5 },
-  { name: 'Bay of Bengal', x: 63, y: 71 },
-];
+// Keyless raster tiles
+const OSM_RASTER_TILES = ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'];
+const SATELLITE_TILES = ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'];
 
-const riskColor = { high: 'var(--red)', moderate: 'var(--amber)', normal: 'var(--green)' };
-const categoryDotClass = { fire: 'red', chemical: 'purple', moderate: 'amber', normal: 'green', facilities: 'fac', watch: 'blue' };
+const SEVERITY_COLOR = { low: '#28d788', medium: '#fdb830', high: '#ff7a33', critical: '#ff4438' };
+const SEVERITY_RADIUS = { low: 4.5, medium: 6, high: 7.5, critical: 8.5 };
+const SEVERITY_RISK_KM = { low: 0.8, medium: 1.5, high: 2.5, critical: 3.2 };
 
-let currentTheme = 'day';
-let activeFilter = 'all';
+// Clean inline SVGs for facilities
+const SVG_ICONS = {
+  fire: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M19.5 13.5A7.5 7.5 0 1 1 12 6c.5 1.5 2 3 2 4.5a2.5 2.5 0 0 0 2.5 2.5c1 0 2-.5 3 .5Z" fill="none" stroke="#ff4438" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 18a3 3 0 0 0 3-3c0-1-1-2-1.5-2.5a1.5 1.5 0 0 0-3 1.5c0 1.5 1 3 1.5 4Z" fill="#ff7a33"/></svg>',
+  hospital: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="#28d788" stroke-width="1.8"/><path d="M12 8v8M8 12h8" stroke="#28d788" stroke-width="2" stroke-linecap="round"/></svg>',
+  industrial: '<svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M3 21V10l6 3V9l6 3V6l6 4v11H3Z" fill="none" stroke="#ff7a33" stroke-width="1.8" stroke-linejoin="round"/></svg>'
+};
+
+const agniraData = {
+  hotspots: [],
+  industrialFacilities: [],
+  emergencyFacilities: [],
+  riskZones: []
+};
+
+function featureCollection(features) { return { type: 'FeatureCollection', features }; }
+
+function hotspotFeature(h) {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: h.coordinates },
+    properties: {
+      id: h.id, name: h.name, location: h.location,
+      confidence: h.confidence, severity: h.severity, status: h.status,
+      category: h.category || 'industrial',
+      source: 'FIRMS DATA', ts: new Date(h.timestamp).getTime(),
+      thermal: h.thermal, temp: h.temp, riskScore: h.riskScore || 75,
+      area: h.area, riskRadiusKm: h.riskRadiusKm
+    }
+  };
+}
+
+function facilityFeature(f) {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: f.coordinates },
+    properties: { id: f.id, name: f.name, type: f.type, status: f.status }
+  };
+}
+
+async function fetchHotspots() {
+  const raw = [
+    { id: 'parawada', name: 'Parawada Industrial Cluster', location: 'Visakhapatnam, Andhra Pradesh',
+      coordinates: [83.2233, 17.6027], confidence: 81, severity: 'critical', category: 'industrial', status: 'Active',
+      timestamp: '2026-09-04T22:41:00+05:30', thermal: 32.6, temp: 326, riskScore: 87, area: '~4.2 km²' },
+    { id: 'atchutapuram-sez', name: 'Atchutapuram SEZ', location: 'Atchutapuram, Andhra Pradesh',
+      coordinates: [83.070, 17.520], confidence: 69, severity: 'high', category: 'industrial', status: 'Active',
+      timestamp: '2026-09-04T22:30:00+05:30', thermal: 21.3, temp: 318, riskScore: 74, area: '~3.1 km²' },
+    { id: 'port-watch', name: 'Port Approach Thermal Watch', location: 'Visakhapatnam Port, Andhra Pradesh',
+      coordinates: [83.290, 17.685], confidence: 55, severity: 'medium', category: 'others', status: 'Monitoring',
+      timestamp: '2026-09-04T22:05:00+05:30', thermal: 14.8, temp: 312, riskScore: 56, area: '~2.0 km²' },
+    { id: 'nakkapalli-chem', name: 'Nakkapalli Chemical Storage', location: 'Nakkapalli, Andhra Pradesh',
+      coordinates: [82.960, 17.560], confidence: 47, severity: 'medium', category: 'industrial', status: 'Monitoring',
+      timestamp: '2026-09-04T21:48:00+05:30', thermal: 9.7, temp: 308, riskScore: 42, area: '~1.4 km²' },
+    { id: 'anakapalle-sensor', name: 'Anakapalle Forest & Green Buffer', location: 'Anakapalle, Andhra Pradesh',
+      coordinates: [83.0037, 17.6910], confidence: 38, severity: 'low', category: 'natural', status: 'Monitoring',
+      timestamp: '2026-09-04T21:10:00+05:30', thermal: 4.1, temp: 301, riskScore: 24, area: '~0.6 km²' }
+  ].map(h => ({ ...h, riskRadiusKm: SEVERITY_RISK_KM[h.severity] }));
+  return featureCollection(raw.map(hotspotFeature));
+}
+
+async function fetchFacilities() {
+  const industrial = [
+    { id: 'nh16-facility', name: 'NH16 Roadside Facility', type: 'industrial', status: 'Operational', coordinates: [83.140, 17.660] },
+    { id: 'parawada-fac-2', name: 'Parawada Facility Block B', type: 'industrial', status: 'Operational', coordinates: [83.210, 17.598] },
+    { id: 'vizag-steel-plant', name: 'Visakhapatnam Steel Plant', type: 'industrial', status: 'Operational', coordinates: [83.1946, 17.6296] },
+    { id: 'hpcl-refinery', name: 'HPCL Refinery Visakhapatnam', type: 'industrial', status: 'Operational', coordinates: [83.2185, 17.6868] },
+    { id: 'atchutapuram-industrial', name: 'Atchutapuram SEZ Industrial Park', type: 'industrial', status: 'Operational', coordinates: [83.075, 17.522] }
+  ];
+  const emergency = [
+    { id: 'kgh-hospital', name: 'King George Hospital', type: 'hospital', status: 'Operational', coordinates: [83.3016, 17.7231] },
+    { id: 'jagadamba-fire', name: 'Jagadamba Fire Station', type: 'fire', status: 'Operational', coordinates: [83.2975, 17.7060] },
+    { id: 'parawada-fire', name: 'Parawada Fire Station', type: 'fire', status: 'Operational', coordinates: [83.225, 17.605] },
+    { id: 'anakapalle-chc', name: 'Anakapalle Community Health Centre', type: 'hospital', status: 'Operational', coordinates: [83.0037, 17.6870] }
+  ];
+  return {
+    industrial: featureCollection(industrial.map(facilityFeature)),
+    emergency: featureCollection(emergency.map(facilityFeature))
+  };
+}
+
+const toRad = d => d * Math.PI / 180;
+const toDeg = r => r * 180 / Math.PI;
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function circlePolygon(centerLng, centerLat, radiusKm, steps = 64) {
+  const R = 6371;
+  const angularDist = radiusKm / R;
+  const lat1 = toRad(centerLat), lon1 = toRad(centerLng);
+  const coords = [];
+  for (let i = 0; i <= steps; i++) {
+    const bearing = toRad((i * 360) / steps);
+    const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDist) + Math.cos(lat1) * Math.sin(angularDist) * Math.cos(bearing));
+    const lon2 = lon1 + Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDist) * Math.cos(lat1),
+      Math.cos(angularDist) - Math.sin(lat1) * Math.sin(lat2)
+    );
+    coords.push([toDeg(lon2), toDeg(lat2)]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
+}
+
+function nearestFacilities(hotspotFeature, maxResults = 4) {
+  const [hLng, hLat] = hotspotFeature.geometry.coordinates;
+  const all = [
+    ...agniraData.industrialFacilities.features.map(f => ({ f, kind: 'industrial' })),
+    ...agniraData.emergencyFacilities.features.map(f => ({ f, kind: f.properties.type }))
+  ];
+  return all
+    .map(({ f, kind }) => ({
+      feature: f,
+      kind,
+      distanceKm: haversineKm(hLat, hLng, f.geometry.coordinates[1], f.geometry.coordinates[0])
+    }))
+    .sort((a, b) => a.distanceKm - b.distanceKm)
+    .slice(0, maxResults);
+}
+
+/* ---------------------------------------------------------
+   STATE
+--------------------------------------------------------- */
+let map;
+let currentTheme = 'night';
+let activeFilter = 'all'; // 'all' | 'industrial' | 'natural' | 'others' | 'facilities'
 let minConfidence = 0;
-const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-let selectedId = HOTSPOTS.find(h => h.selected)?.id || HOTSPOTS[0].id;
-let layerVisibility = { hotspots: true, clusters: true, facilities: true, roads: true, labels: true };
+let currentMapMode = 'standard'; // 'standard' | 'satellite'
+let selectedId = null;
+let layerVisibility = { hotspots: true, riskzones: true, industrial: true, emergency: true };
+let timelineCutoffMs = Infinity;
+let timelineMinMs = 0, timelineMaxMs = 0;
+let timelinePlaying = false, timelineTimer = null;
+let currentGaugeAnim = null;
+let clickPulseAnimId = null;
 
-/* ---------- rendering ---------- */
+function getHotspotById(id) {
+  return agniraData.hotspots.features.find(f => f.properties.id === id) || null;
+}
 
-const markersLayer = document.getElementById('markersLayer');
-
-function visibleHotspots(){
-  return HOTSPOTS.filter(h => {
-    if (h.confidence < minConfidence) return false;
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'facilities') return h.category === 'facilities';
-    return h.category === activeFilter;
+function timeFilteredHotspots() {
+  return agniraData.hotspots.features.filter(f => {
+    const matchTime = f.properties.ts <= timelineCutoffMs;
+    const matchConf = f.properties.confidence >= minConfidence;
+    let matchFilter = true;
+    if (activeFilter === 'facilities') {
+      matchFilter = false;
+    } else if (activeFilter !== 'all') {
+      matchFilter = f.properties.category === activeFilter;
+    }
+    return matchTime && matchConf && matchFilter;
   });
 }
 
-// marker DOM elements persist across re-renders (keyed by hotspot id) so that
-// showing/hiding via filters or layer toggles animates opacity instead of
-// abruptly destroying and recreating nodes.
-const markerEls = {};
+/* ---------------------------------------------------------
+   MAP ENGINE INITIALIZATION
+--------------------------------------------------------- */
+function initMap() {
+  if (typeof maplibregl === 'undefined') return;
 
-function renderMarkers(){
-  const list = visibleHotspots();
-  const visibleIds = new Set();
-
-  list.forEach(h => {
-    if (h.category === 'facilities' && !layerVisibility.facilities) return;
-    if (h.category !== 'facilities' && !layerVisibility.hotspots) return;
-    visibleIds.add(h.id);
+  map = new maplibregl.Map({
+    container: 'glMap',
+    dragRotate: false,
+    pitchWithRotate: false,
+    touchPitch: false,
+    attributionControl: false,
+    style: {
+      version: 8,
+      sources: {
+        'osm-tiles': { type: 'raster', tiles: OSM_RASTER_TILES, tileSize: 256 },
+        'sat-tiles': { type: 'raster', tiles: SATELLITE_TILES, tileSize: 256 }
+      },
+      layers: [
+        { id: 'osm-base', type: 'raster', source: 'osm-tiles', paint: { 'raster-opacity': 1 } },
+        { id: 'sat-base', type: 'raster', source: 'sat-tiles', layout: { visibility: 'none' }, paint: { 'raster-opacity': 1 } }
+      ]
+    },
+    center: MAP_CENTER,
+    zoom: MAP_ZOOM
   });
 
-  HOTSPOTS.forEach(h => {
-    const cls = categoryDotClass[h.category] || 'green';
-    const isSelected = h.id === selectedId;
-    let el = markerEls[h.id];
+  map.on('load', onMapLoad);
+  map.on('mousemove', e => updateCoordHud(e.lngLat));
+  map.on('click', e => updateCoordHud(e.lngLat));
+  map.on('zoom', updateScaleBar);
+  map.on('moveend', updateScaleBar);
+}
 
-    if (!el) {
-      el = document.createElement('div');
-      el.dataset.id = h.id;
-      el.addEventListener('click', (e) => { e.stopPropagation(); selectHotspot(h.id); });
-      markersLayer.appendChild(el);
-      markerEls[h.id] = el;
+async function onMapLoad() {
+  try {
+    const [hotspots, facilities] = await Promise.all([fetchHotspots(), fetchFacilities()]);
+    agniraData.hotspots = hotspots;
+    agniraData.industrialFacilities = facilities.industrial;
+    agniraData.emergencyFacilities = facilities.emergency;
+
+    addEmptySource('risk-zone');
+    addEmptySource('proximity-lines');
+    addEmptySource('click-pulse');
+
+    map.addSource('hotspots-src', { type: 'geojson', data: agniraData.hotspots });
+    map.addSource('industrial-src', { type: 'geojson', data: agniraData.industrialFacilities });
+    map.addSource('emergency-src', { type: 'geojson', data: agniraData.emergencyFacilities });
+
+    // Risk perimeter polygon
+    map.addLayer({
+      id: 'risk-zone-fill', type: 'fill', source: 'risk-zone',
+      paint: { 'fill-color': '#ff4438', 'fill-opacity': 0.12 }
+    });
+    map.addLayer({
+      id: 'risk-zone-line', type: 'line', source: 'risk-zone',
+      paint: { 'line-color': '#ff4438', 'line-width': 1.6, 'line-dasharray': [3, 2], 'line-opacity': 0.85 }
+    });
+    map.addLayer({
+      id: 'proximity-lines-layer', type: 'line', source: 'proximity-lines',
+      paint: { 'line-color': '#fdb830', 'line-width': 1.2, 'line-dasharray': [2, 2], 'line-opacity': 0.8 }
+    });
+
+    // Facility markers
+    map.addLayer({
+      id: 'industrial-facilities-layer', type: 'circle', source: 'industrial-src',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': '#ffffff',
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#111210',
+        'circle-opacity': 0.95
+      }
+    });
+    map.addLayer({
+      id: 'emergency-facilities-layer', type: 'circle', source: 'emergency-src',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': ['match', ['get', 'type'], 'fire', '#ff5a46', '#39e7a5'],
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#111210',
+        'circle-opacity': 0.95
+      }
+    });
+
+    // Hotspot markers with radial halo
+    map.addLayer({
+      id: 'hotspots-pulse', type: 'circle', source: 'hotspots-src',
+      filter: ['any', ['==', ['get', 'severity'], 'high'], ['==', ['get', 'severity'], 'critical']],
+      paint: {
+        'circle-radius': 11,
+        'circle-color': ['match', ['get', 'severity'], 'critical', SEVERITY_COLOR.critical, SEVERITY_COLOR.high],
+        'circle-opacity': 0.3
+      }
+    });
+
+    // Dynamic Expanding Click Wavefront Layer
+    map.addLayer({
+      id: 'click-pulse-layer',
+      type: 'circle',
+      source: 'click-pulse',
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#ff4438',
+        'circle-opacity': 0.8,
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': '#ff7a33',
+        'circle-stroke-opacity': 0.9
+      }
+    });
+
+    map.addLayer({
+      id: 'hotspots-circle', type: 'circle', source: 'hotspots-src',
+      paint: {
+        'circle-radius': ['match', ['get', 'severity'],
+          'low', SEVERITY_RADIUS.low, 'medium', SEVERITY_RADIUS.medium, 'high', SEVERITY_RADIUS.high, 'critical', SEVERITY_RADIUS.critical, 5.5],
+        'circle-color': ['match', ['get', 'severity'],
+          'low', SEVERITY_COLOR.low, 'medium', SEVERITY_COLOR.medium, 'high', SEVERITY_COLOR.high, 'critical', SEVERITY_COLOR.critical, '#ffffff'],
+        'circle-stroke-width': 1.6,
+        'circle-stroke-color': '#111210',
+        'circle-opacity': 0.95
+      }
+    });
+
+    wireMapInteractions();
+    setupTimeline();
+    applyAllLayerVisibility();
+    renderMiniBars();
+    renderAnalytics();
+    updateStatusCounts();
+    updateScaleBar();
+
+    const initial = agniraData.hotspots.features.slice().sort((a, b) => b.properties.riskScore - a.properties.riskScore)[0];
+    if (initial) selectHotspot(initial.properties.id, { fly: false });
+  } catch (err) {
+    console.error('GIS layer setup error:', err);
+  } finally {
+    const loading = document.getElementById('mapLoading');
+    if (loading) loading.classList.add('hidden');
+  }
+}
+
+function addEmptySource(id) {
+  map.addSource(id, { type: 'geojson', data: featureCollection([]) });
+}
+
+function wireMapInteractions() {
+  map.on('click', 'hotspots-circle', e => {
+    if (!e.features.length) return;
+    selectHotspot(e.features[0].properties.id, { fly: false });
+  });
+
+  map.on('mouseenter', 'hotspots-circle', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('mouseleave', 'hotspots-circle', () => { map.getCanvas().style.cursor = ''; });
+
+  map.on('click', 'industrial-facilities-layer', e => showFacilityPopup(e.features[0], 'industrial'));
+  map.on('click', 'emergency-facilities-layer', e => showFacilityPopup(e.features[0], e.features[0].properties.type));
+}
+
+function showFacilityPopup(feature, kind) {
+  const [lng, lat] = feature.geometry.coordinates;
+  const iconSvg = SVG_ICONS[kind] || SVG_ICONS.industrial;
+  new maplibregl.Popup({ closeButton: true, maxWidth: '240px' })
+    .setLngLat([lng, lat])
+    .setHTML(`
+      <div class="gl-popup-title">${iconSvg} ${feature.properties.name}</div>
+      <div class="gl-popup-row"><span>Type</span><b>${kind.toUpperCase()}</b></div>
+      <div class="gl-popup-row"><span>Status</span><b>${feature.properties.status}</b></div>
+      <div class="gl-popup-row"><span>Coords</span><b>${lat.toFixed(4)}, ${lng.toFixed(4)}</b></div>
+    `)
+    .addTo(map);
+}
+
+function updateCoordHud(lngLat) {
+  document.getElementById('hudLat').textContent = lngLat.lat.toFixed(5);
+  document.getElementById('hudLon').textContent = lngLat.lng.toFixed(5);
+  document.getElementById('hudZoom').textContent = map.getZoom().toFixed(1);
+}
+
+function updateScaleBar() {
+  const zoom = map.getZoom();
+  const center = map.getCenter();
+  const metersPerPixel = 156543.03392 * Math.cos(toRad(center.lat)) / Math.pow(2, zoom);
+  const targetPx = 96;
+  const km = (metersPerPixel * targetPx) / 1000;
+  const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200].reduce((a, b) => Math.abs(b - km) < Math.abs(a - km) ? b : a);
+  document.getElementById('scaleMaxLabel').textContent = nice >= 1 ? `${nice} km` : `${nice * 1000} m`;
+  document.getElementById('scaleMidLabel').textContent = nice >= 1 ? `${(nice / 2)}` : `${(nice * 1000) / 2}`;
+}
+
+/* ---------------------------------------------------------
+   CLICK PULSE WAVEFRONT ANIMATION
+--------------------------------------------------------- */
+function triggerClickPulse(coords, severity) {
+  const pulseFeature = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: coords },
+    properties: {}
+  };
+
+  const pulseSource = map.getSource('click-pulse');
+  if (!pulseSource) return;
+
+  pulseSource.setData(featureCollection([pulseFeature]));
+
+  const color = SEVERITY_COLOR[severity] || '#ff4438';
+  map.setPaintProperty('click-pulse-layer', 'circle-color', color);
+  map.setPaintProperty('click-pulse-layer', 'circle-stroke-color', color);
+
+  if (clickPulseAnimId) cancelAnimationFrame(clickPulseAnimId);
+
+  const duration = 1200;
+  const start = performance.now();
+  const maxRadius = 38;
+  const startRadius = 6;
+
+  function animate(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeOut = 1 - Math.pow(1 - progress, 2);
+
+    const currentRadius = startRadius + (maxRadius - startRadius) * easeOut;
+    const currentOpacity = (1 - progress) * 0.75;
+    const strokeOpacity = (1 - progress) * 0.95;
+
+    if (map && map.getLayer('click-pulse-layer')) {
+      map.setPaintProperty('click-pulse-layer', 'circle-radius', currentRadius);
+      map.setPaintProperty('click-pulse-layer', 'circle-opacity', currentOpacity);
+      map.setPaintProperty('click-pulse-layer', 'circle-stroke-opacity', strokeOpacity);
     }
 
-    el.className = `marker ${cls}` + (isSelected ? ' selected' : '') + (visibleIds.has(h.id) ? '' : ' marker--hidden');
-    el.dataset.risk = h.risk;
-    el.style.left = h.x + '%';
-    el.style.top = h.y + '%';
-
-    // every category — including facilities — renders as the same clean
-    // solid-core point; only size/color/glow differ (handled in CSS)
-    let inner = '<div class="pulse-ring"></div><div class="marker-dot"></div>';
-    if (h.showTooltip && isSelected) {
-      inner += `<div class="marker-tooltip">
-        <div class="tt-title">${h.name}</div>
-        <div class="tt-risk" style="color:${riskColor[h.risk]}"><span class="dot" style="background:${riskColor[h.risk]}"></span>${h.risk.toUpperCase()} RISK</div>
-        <div class="tt-meta">${h.thermal} MW · ${h.confidence}% confidence</div>
-      </div>`;
+    if (progress < 1) {
+      clickPulseAnimId = requestAnimationFrame(animate);
+    } else {
+      pulseSource.setData(featureCollection([]));
+      clickPulseAnimId = null;
     }
-    el.innerHTML = inner;
+  }
+
+  clickPulseAnimId = requestAnimationFrame(animate);
+}
+
+/* ---------------------------------------------------------
+   HOTSPOT SELECTION & SPEEDOMETER ANIMATION
+--------------------------------------------------------- */
+function selectHotspot(id, opts = {}) {
+  const h = getHotspotById(id);
+  if (!h) return;
+  selectedId = id;
+
+  const [lng, lat] = h.geometry.coordinates;
+
+  triggerClickPulse(h.geometry.coordinates, h.properties.severity);
+
+  const circle = circlePolygon(lng, lat, h.properties.riskRadiusKm);
+  map.getSource('risk-zone').setData(featureCollection([circle]));
+
+  const near = nearestFacilities(h, 4);
+  const lines = near.slice(0, 3).map(n => ({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: [h.geometry.coordinates, n.feature.geometry.coordinates] },
+    properties: {}
+  }));
+  map.getSource('proximity-lines').setData(featureCollection(lines));
+
+  fillDetailCard(h, near);
+
+  if (opts.fly !== false) {
+    map.flyTo({ center: h.geometry.coordinates, zoom: Math.max(map.getZoom(), 12), speed: 0.9 });
+  }
+}
+
+function clearSelection() {
+  selectedId = null;
+  if (clickPulseAnimId) {
+    cancelAnimationFrame(clickPulseAnimId);
+    clickPulseAnimId = null;
+  }
+  map.getSource('click-pulse')?.setData(featureCollection([]));
+  map.getSource('risk-zone').setData(featureCollection([]));
+  map.getSource('proximity-lines').setData(featureCollection([]));
+
+  document.getElementById('selectedSection').classList.add('hidden');
+  document.getElementById('overviewSection').classList.remove('hidden');
+}
+
+function animateSpeedometer(targetScore) {
+  const totalArc = 220;
+  const arcEl = document.getElementById('speedoArc');
+  const needleGroup = document.getElementById('speedoNeedleGroup');
+  const scoreNumEl = document.getElementById('speedoVal');
+  const bandTag = document.getElementById('riskBandTag');
+
+  if (currentGaugeAnim) cancelAnimationFrame(currentGaugeAnim);
+
+  const startVal = 0;
+  const startTime = performance.now();
+  const duration = 850;
+
+  function frame(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    const currentScore = Math.round(startVal + (targetScore - startVal) * ease);
+    scoreNumEl.textContent = currentScore;
+
+    const offset = totalArc - (currentScore / 100) * totalArc;
+    arcEl.style.strokeDashoffset = offset;
+
+    const deg = -90 + (currentScore / 100) * 180;
+    needleGroup.setAttribute('transform', `translate(90, 95) rotate(${deg})`);
+
+    if (progress < 1) {
+      currentGaugeAnim = requestAnimationFrame(frame);
+    } else {
+      if (targetScore >= 70) {
+        bandTag.textContent = 'HIGH';
+        bandTag.style.color = 'var(--red)';
+      } else if (targetScore >= 40) {
+        bandTag.textContent = 'MODERATE';
+        bandTag.style.color = 'var(--amber)';
+      } else {
+        bandTag.textContent = 'LOW';
+        bandTag.style.color = 'var(--green)';
+      }
+    }
+  }
+
+  currentGaugeAnim = requestAnimationFrame(frame);
+}
+
+function fillDetailCard(h, nearest) {
+  const p = h.properties;
+  const color = SEVERITY_COLOR[p.severity] || '#ffffff';
+
+  document.getElementById('overviewSection').classList.add('hidden');
+  document.getElementById('selectedSection').classList.remove('hidden');
+
+  const dot = document.getElementById('detailRiskDot');
+  const label = document.getElementById('detailRiskLabel');
+  dot.style.background = color;
+  dot.style.boxShadow = `0 0 6px ${color}`;
+  label.textContent = p.severity.toUpperCase() + ' RISK';
+  label.style.color = color;
+
+  document.getElementById('detailTitle').textContent = p.name;
+  document.getElementById('detailLoc').textContent = p.location;
+  const [lng, lat] = h.geometry.coordinates;
+  document.getElementById('detailCoords').textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
+
+  document.getElementById('statThermal').innerHTML = `${p.thermal} <span class="unit">MW</span>`;
+  document.getElementById('statTemp').innerHTML = `${p.temp} <span class="unit">K</span>`;
+  document.getElementById('statConf').innerHTML = `${p.confidence}<span class="unit">%</span>`;
+
+  // Animate bike speedometer needle & arc from 0 to target
+  animateSpeedometer(p.riskScore || 60);
+
+  const list = document.getElementById('nearestList');
+  if (!nearest.length) {
+    list.innerHTML = '<div style="font-size:11px; color:var(--text-muted); font-style:italic">No proximate facilities indexed.</div>';
+  } else {
+    list.innerHTML = nearest.map(n => {
+      const iconSvg = SVG_ICONS[n.kind] || SVG_ICONS.industrial;
+      return `
+        <div class="nearest-item" data-id="${n.feature.properties.id}">
+          <span class="ni-name">${iconSvg} ${n.feature.properties.name}</span>
+          <span class="ni-dist">${n.distanceKm.toFixed(2)} km</span>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.nearest-item').forEach(row => {
+      row.addEventListener('click', () => {
+        const fid = row.dataset.id;
+        const all = agniraData.industrialFacilities.features.concat(agniraData.emergencyFacilities.features);
+        const f = all.find(x => x.properties.id === fid);
+        if (f) map.flyTo({ center: f.geometry.coordinates, zoom: 13.5 });
+      });
+    });
+  }
+}
+
+/* ---------------------------------------------------------
+   LAYER VISIBILITY & FILTERS
+--------------------------------------------------------- */
+function setLayerVisible(ids, visible) {
+  ids.forEach(id => {
+    if (map && map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  });
+}
+
+function applyAllLayerVisibility() {
+  const showHotspots = layerVisibility.hotspots && activeFilter !== 'facilities';
+  setLayerVisible(['hotspots-circle', 'hotspots-pulse'], showHotspots);
+  setLayerVisible(['risk-zone-fill', 'risk-zone-line'], layerVisibility.riskzones);
+  setLayerVisible(['industrial-facilities-layer'], layerVisibility.industrial);
+  setLayerVisible(['emergency-facilities-layer'], layerVisibility.emergency);
+  applyHotspotFilter();
+}
+
+function applyHotspotFilter() {
+  const conditions = [
+    ['<=', ['get', 'ts'], timelineCutoffMs === Infinity ? Number.MAX_SAFE_INTEGER : timelineCutoffMs],
+    ['>=', ['get', 'confidence'], minConfidence]
+  ];
+  if (activeFilter === 'facilities') {
+    conditions.push(['==', ['get', 'id'], '__none__']);
+  } else if (activeFilter !== 'all') {
+    conditions.push(['==', ['get', 'category'], activeFilter]);
+  }
+  const filter = ['all', ...conditions];
+  if (map && map.getLayer('hotspots-circle')) map.setFilter('hotspots-circle', filter);
+  if (map && map.getLayer('hotspots-pulse')) map.setFilter('hotspots-pulse', filter);
+
+  updateStatusCounts();
+  renderAnalytics();
+}
+
+/* ---------------------------------------------------------
+   MAP MODES: STANDARD / SATELLITE
+--------------------------------------------------------- */
+function setMapMode(mode) {
+  currentMapMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+  if (mode === 'satellite') {
+    document.body.classList.add('mode-satellite-active');
+    map.setLayoutProperty('osm-base', 'visibility', 'none');
+    map.setLayoutProperty('sat-base', 'visibility', 'visible');
+  } else {
+    document.body.classList.remove('mode-satellite-active');
+    map.setLayoutProperty('sat-base', 'visibility', 'none');
+    map.setLayoutProperty('osm-base', 'visibility', 'visible');
+  }
+
+  setLayerVisible(['hotspots-circle', 'hotspots-pulse'], layerVisibility.hotspots && activeFilter !== 'facilities');
+}
+
+/* ---------------------------------------------------------
+   TIMELINE / TEMPORAL PLAYBACK
+--------------------------------------------------------- */
+function setupTimeline() {
+  const times = agniraData.hotspots.features.map(f => f.properties.ts);
+  timelineMinMs = Math.min(...times);
+  timelineMaxMs = Math.max(...times);
+  timelineCutoffMs = timelineMaxMs;
+
+  document.getElementById('timelineTimeStart').textContent = fmtHM(timelineMinMs);
+  document.getElementById('timelineTimeEnd').textContent = fmtHM(timelineMaxMs);
+
+  const slider = document.getElementById('timelineSlider');
+  slider.value = 100;
+  slider.addEventListener('input', () => {
+    const pct = Number(slider.value) / 100;
+    timelineCutoffMs = timelineMinMs + pct * (timelineMaxMs - timelineMinMs);
+    const nowEl = document.getElementById('timelineNow');
+    if (pct < 0.99) {
+      nowEl.textContent = fmtHM(timelineCutoffMs);
+      nowEl.classList.add('scrubbing');
+    } else {
+      nowEl.textContent = 'LIVE';
+      nowEl.classList.remove('scrubbing');
+    }
+    applyHotspotFilter();
+    if (selectedId && !timeFilteredHotspots().some(f => f.properties.id === selectedId)) clearSelection();
   });
 
-  updateStatusCounts(list);
+  document.getElementById('timelinePlay').addEventListener('click', toggleTimelinePlayback);
 }
 
-// brief radar-lock detection animation — plays once, only when a hotspot
-// is newly selected, never on a routine re-render.
-function triggerDetectAnimation(id){
-  const el = markerEls[id];
-  if (!el) return;
-  el.classList.remove('marker--detect');
-  // force reflow so the animation can restart if selected again quickly
-  void el.offsetWidth;
-  el.classList.add('marker--detect');
-  setTimeout(() => el.classList.remove('marker--detect'), 1100);
+function fmtHM(ms) {
+  return new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-function updateStatusCounts(list){
-  const activeCount = list.filter(h => h.category !== 'facilities').length;
-  const highRiskCount = list.filter(h => h.risk === 'high').length;
-  document.getElementById('activeHotspotsCount').textContent = activeCount;
+function toggleTimelinePlayback() {
+  const btn = document.getElementById('timelinePlay');
+  timelinePlaying = !timelinePlaying;
+  btn.querySelector('.icon-play').style.display = timelinePlaying ? 'none' : '';
+  btn.querySelector('.icon-pause').style.display = timelinePlaying ? '' : 'none';
+  const slider = document.getElementById('timelineSlider');
+  if (timelinePlaying) {
+    if (Number(slider.value) >= 100) slider.value = 0;
+    timelineTimer = setInterval(() => {
+      let v = Number(slider.value) + 1.5;
+      if (v >= 100) { v = 100; toggleTimelinePlayback(); }
+      slider.value = v;
+      slider.dispatchEvent(new Event('input'));
+    }, 120);
+  } else {
+    clearInterval(timelineTimer);
+  }
+}
+
+function updateStatusCounts() {
+  const active = timeFilteredHotspots();
+  const highRiskCount = active.filter(f => f.properties.severity === 'critical' || f.properties.severity === 'high').length;
+  document.getElementById('activeHotspotsCount').textContent = active.length;
   document.getElementById('highRiskCount').textContent = highRiskCount;
 }
 
-function selectHotspot(id){
-  HOTSPOTS.forEach(h => h.showTooltip = false);
-  const h = HOTSPOTS.find(x => x.id === id);
-  if (!h) return;
-  const card = document.getElementById('detailCard');
-  const isSwitchingHotspot = selectedId !== id && !card.classList.contains('hidden');
-  selectedId = id;
-  h.showTooltip = true;
-  renderMarkers();
-  triggerDetectAnimation(id);
+function renderAnalytics() {
+  const active = timeFilteredHotspots();
+  const total = active.length;
+  const highRisk = active.filter(f => f.properties.severity === 'high' || f.properties.severity === 'critical').length;
+  const avgConfidence = total ? Math.round(active.reduce((s, f) => s + f.properties.confidence, 0) / total) : 0;
 
-  if (isSwitchingHotspot && !prefersReducedMotion) {
-    card.classList.add('content-swap');
-    setTimeout(() => {
-      fillDetailCard(h);
-      card.classList.remove('content-swap');
-    }, 120);
-  } else {
-    fillDetailCard(h);
-  }
-
-  card.classList.remove('hidden');
-  document.getElementById('detailExtra').classList.remove('show');
+  const box = document.getElementById('analyticsStats');
+  if (!box) return;
+  box.innerHTML = `
+    <div class="a-stat"><span class="a-label">Total Hotspots</span><span class="a-value">${total}</span></div>
+    <div class="a-stat"><span class="a-label">High/Crit</span><span class="a-value" style="color:var(--red)">${highRisk}</span></div>
+    <div class="a-stat"><span class="a-label">Avg Conf</span><span class="a-value">${avgConfidence}%</span></div>
+    <div class="a-stat"><span class="a-label">Status</span><span class="a-value" style="color:var(--green)">NOMINAL</span></div>
+  `;
 }
 
-function fillDetailCard(h){
-  const dot = document.getElementById('detailRiskDot');
-  const label = document.getElementById('detailRiskLabel');
-  const pill = document.getElementById('detailStatusPill');
-  const color = riskColor[h.risk];
-  dot.style.background = color;
-  dot.style.boxShadow = `0 0 6px ${color}`;
-  label.textContent = h.risk.toUpperCase() + ' RISK';
-  label.style.color = color;
-  pill.textContent = h.status;
-
-  document.getElementById('detailTitle').textContent = h.name;
-  document.getElementById('detailLoc').textContent = h.location;
-  document.getElementById('detailCoords').textContent =
-    `${h.lat.toFixed(4)}° N, ${h.lng.toFixed(4)}° E`;
-
-  document.getElementById('statThermal').innerHTML = `${h.thermal} <span class="unit">MW</span>`;
-  document.getElementById('statTemp').innerHTML = `${h.temp} <span class="unit">K</span>`;
-  document.getElementById('statConf').innerHTML = `${h.confidence}<span class="unit">%</span>`;
-
-  // replay the small sequential fade-up entrance on the three metric boxes
-  document.querySelectorAll('#statRow .stat-box').forEach(box => {
-    box.style.animation = 'none';
-    void box.offsetWidth; // force reflow so the animation can restart
-    box.style.animation = '';
-  });
-
-  document.getElementById('aiClass').textContent = h.aiClass;
-  document.getElementById('aiPct').textContent = h.aiPct + '%';
-  document.getElementById('aiDesc').textContent = h.desc;
-
-  // the assessment's accent reflects what was actually found, not a fixed
-  // brand color — chemical signatures read purple, everything else follows
-  // the same risk severity as the status dot above
-  const aiColor = h.category === 'chemical' ? 'var(--purple)' : color;
-  document.getElementById('aiFlame').style.color = aiColor;
-  document.getElementById('aiPct').style.color = aiColor;
-  const barFill = document.getElementById('aiBarFill');
-  barFill.style.background = aiColor;
-
-  // animate the confidence bar from 0 up to its real (unaltered) value
-  barFill.style.transition = 'none';
-  barFill.style.width = '0%';
-  void barFill.offsetWidth; // force reflow
-  barFill.style.transition = '';
-  requestAnimationFrame(() => { barFill.style.width = h.aiPct + '%'; });
-
-  document.getElementById('extraDetected').textContent = h.detected;
-  document.getElementById('extraArea').textContent = h.area;
-  document.getElementById('extraSat').textContent = h.sat;
+function renderMiniBars() {
+  const active = timeFilteredHotspots();
+  const cats = [
+    { key: 'industrial', label: 'Industrial', color: 'var(--orange)' },
+    { key: 'natural', label: 'Natural', color: 'var(--green)' },
+    { key: 'others', label: 'Others', color: 'var(--amber)' }
+  ];
+  const max = Math.max(...cats.map(c => active.filter(f => f.properties.category === c.key).length), 1);
+  const box = document.getElementById('miniBars');
+  if (!box) return;
+  box.innerHTML = cats.map(c => {
+    const count = active.filter(f => f.properties.category === c.key).length;
+    return `
+      <div class="mini-bar-row">
+        <span class="lbl">${c.label}</span>
+        <span class="track"><span class="fill" style="width:${(count / max) * 100}%; background:${c.color};"></span></span>
+        <span class="val">${count}</span>
+      </div>`;
+  }).join('');
 }
 
-/* ---------- day / night ----------
-   currentTheme is the ONE source of truth for day/night. Every visible
-   signal — body theme, toggle classes (which drive the knob position,
-   label color, and dot color via CSS), aria-checked, and the "DAY"/"NIGHT"
-   word next to AGNIRA — is derived from it here, in one place, every time
-   the mode changes. Nothing else should set or read a separate flag. */
-
+/* ---------------------------------------------------------
+   DAY / NIGHT MODE SYSTEM
+--------------------------------------------------------- */
 const dayNightToggle = document.getElementById('dayNightToggle');
+const THEME_KEY = 'agnira-theme-v8';
 
-function applyTheme(mode){
+function applyTheme(mode) {
   const isNight = mode === 'night';
   currentTheme = isNight ? 'night' : 'day';
   document.body.classList.toggle('theme-day', !isNight);
+  document.body.classList.toggle('theme-night', isNight);
   dayNightToggle.classList.toggle('is-night', isNight);
   dayNightToggle.classList.toggle('is-day', !isNight);
   dayNightToggle.setAttribute('aria-checked', String(!isNight));
   document.getElementById('modeWord').textContent = isNight ? 'NIGHT' : 'DAY';
+  localStorage.setItem(THEME_KEY, currentTheme);
 }
 
-// boot from whatever mode the markup already declares, so the very first
-// paint and the very first JS-driven state can never disagree
-applyTheme(dayNightToggle.classList.contains('is-night') ? 'night' : 'day');
+applyTheme(localStorage.getItem(THEME_KEY) || 'night');
 
 dayNightToggle.addEventListener('click', () => applyTheme(currentTheme === 'night' ? 'day' : 'night'));
-dayNightToggle.addEventListener('keydown', (e) => {
+dayNightToggle.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyTheme(currentTheme === 'night' ? 'day' : 'night'); }
 });
 
-/* ---------- search ---------- */
-
+/* ---------------------------------------------------------
+   CONTROLS, SEARCH & POPOVERS
+--------------------------------------------------------- */
 const searchInput = document.getElementById('searchInput');
 const searchHint = document.getElementById('searchHint');
 const searchClear = document.getElementById('searchClear');
-const searchHintDefault = searchHint.textContent;
 
-function updateSearchClearVisibility(){
-  searchClear.style.display = searchInput.value.length ? 'flex' : 'none';
-}
-function clearSearch(focusAfter){
-  searchInput.value = '';
-  updateSearchClearVisibility();
-  searchHint.textContent = searchHintDefault;
-  searchHint.classList.remove('show');
-  if (focusAfter) searchInput.focus();
-}
 searchInput.addEventListener('focus', () => searchHint.classList.add('show'));
 searchInput.addEventListener('blur', () => setTimeout(() => searchHint.classList.remove('show'), 150));
-searchInput.addEventListener('input', updateSearchClearVisibility);
-searchClear.addEventListener('click', () => clearSearch(true));
+searchInput.addEventListener('input', () => { searchClear.style.display = searchInput.value.length ? 'flex' : 'none'; });
+searchClear.addEventListener('click', () => { searchInput.value = ''; searchClear.style.display = 'none'; });
 
-searchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { clearSearch(false); searchInput.blur(); return; }
-  if (e.key !== 'Enter') return;
-  const q = e.target.value.trim().toLowerCase();
-  if (!q) { clearSearch(true); return; }
-
-  // try a hotspot name/location match first
-  const hotspotMatch = HOTSPOTS.find(h =>
-    h.name.toLowerCase().includes(q) || h.location.toLowerCase().includes(q));
-  if (hotspotMatch) {
-    selectHotspot(hotspotMatch.id);
-    flashLocation(hotspotMatch.x, hotspotMatch.y);
-    showToast(`Found: ${hotspotMatch.name}`);
-    searchHint.textContent = searchHintDefault;
-    return;
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const q = searchInput.value.trim().toLowerCase();
+    const match = agniraData.hotspots.features.find(f => f.properties.name.toLowerCase().includes(q));
+    if (match) { selectHotspot(match.properties.id, { fly: true }); showToast(`Focused: ${match.properties.name}`); }
   }
-
-  // then a place label
-  const placeMatch = PLACES.find(p => p.name.toLowerCase().includes(q));
-  if (placeMatch) {
-    flashLocation(placeMatch.x, placeMatch.y);
-    showToast(`Centered on ${placeMatch.name}`);
-    searchHint.textContent = searchHintDefault;
-    return;
-  }
-
-  // coordinate search "lat, lng"
-  const coordMatch = q.match(/(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)/);
-  if (coordMatch) {
-    showToast(`No hotspot at ${coordMatch[1]}, ${coordMatch[2]}`);
-    searchHint.textContent = searchHintDefault;
-    return;
-  }
-
-  searchHint.textContent = `No match for "${e.target.value.trim()}"`;
-  searchHint.classList.add('show');
 });
-
-function flashLocation(x, y){
-  const ring = document.createElement('div');
-  ring.style.position = 'absolute';
-  ring.style.left = x + '%';
-  ring.style.top = y + '%';
-  ring.style.width = '30px';
-  ring.style.height = '30px';
-  ring.style.marginLeft = '-15px';
-  ring.style.marginTop = '-15px';
-  ring.style.borderRadius = '50%';
-  ring.style.border = '2px solid var(--orange)';
-  ring.style.zIndex = '45';
-  ring.style.pointerEvents = 'none';
-  ring.style.animation = 'pulseRing 1s ease-out 2';
-  markersLayer.appendChild(ring);
-  setTimeout(() => ring.remove(), 2000);
-}
-
-/* ---------- notification bell ---------- */
-
-const bellBtn = document.getElementById('bellBtn');
-const bellPanel = document.getElementById('bellPanel');
-const bellDot = document.getElementById('bellDot');
-bellBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  bellPanel.classList.toggle('show');
-  if (bellPanel.classList.contains('show')) bellDot.style.display = 'none';
-});
-document.addEventListener('click', (e) => {
-  if (!bellBtn.contains(e.target)) bellPanel.classList.remove('show');
-});
-
-/* ---------- tool rail + popovers ---------- */
 
 const popovers = {
   layers: document.getElementById('layersPopover'),
   filter: document.getElementById('filterPopover'),
-  chart: document.getElementById('chartPopover'),
+  chart: document.getElementById('chartPopover')
 };
 const toolButtons = {
   layers: document.getElementById('toolLayers'),
   filter: document.getElementById('toolFilter'),
-  chart: document.getElementById('toolChart'),
+  chart: document.getElementById('toolChart')
 };
 
-function closeAllPopovers(exceptKey){
-  Object.keys(popovers).forEach(key => {
-    if (key === exceptKey) return;
-    popovers[key].classList.remove('show');
-    toolButtons[key].classList.remove('active');
-  });
-}
-function togglePopover(key){
-  const isShowing = popovers[key].classList.contains('show');
-  closeAllPopovers(key);
-  popovers[key].classList.toggle('show', !isShowing);
-  toolButtons[key].classList.toggle('active', !isShowing);
+function togglePopover(key) {
+  const isOpen = popovers[key].classList.contains('show');
+  Object.keys(popovers).forEach(k => { popovers[k].classList.remove('show'); toolButtons[k]?.classList.remove('active'); });
+  if (!isOpen) { popovers[key].classList.add('show'); toolButtons[key]?.classList.add('active'); }
 }
 
-// layers icon is visually active (highlighted) to match the reference,
-// but its popover starts closed
-toolButtons.layers.classList.add('active');
-
-document.getElementById('toolLayers').addEventListener('click', (e) => { e.stopPropagation(); togglePopover('layers'); });
-document.getElementById('toolFilter').addEventListener('click', (e) => { e.stopPropagation(); togglePopover('filter'); });
-document.getElementById('toolChart').addEventListener('click', (e) => {
-  e.stopPropagation();
-  renderMiniBars();
-  togglePopover('chart');
-});
-document.getElementById('toolMenu').addEventListener('click', () => {
-  showToast('Menu: use the top navigation to switch sections');
-});
-document.getElementById('toolLocate').addEventListener('click', () => {
-  const h = HOTSPOTS.find(x => x.id === selectedId) || HOTSPOTS[0];
-  flashLocation(h.x, h.y);
-  showToast('Recentered on ' + h.name);
-});
+document.getElementById('toolLayers').addEventListener('click', e => { e.stopPropagation(); togglePopover('layers'); });
+document.getElementById('toolFilter').addEventListener('click', e => { e.stopPropagation(); togglePopover('filter'); });
+document.getElementById('toolChart').addEventListener('click', e => { e.stopPropagation(); renderAnalytics(); renderMiniBars(); togglePopover('chart'); });
+document.getElementById('toolLocate').addEventListener('click', () => { map.flyTo({ center: MAP_CENTER, zoom: MAP_ZOOM }); });
 document.getElementById('toolFullscreen').addEventListener('click', () => {
-  if (!document.fullscreenElement) {
-    document.getElementById('app').requestFullscreen?.().catch(() => showToast('Fullscreen not available'));
-  } else {
-    document.exitFullscreen?.();
-  }
+  if (!document.fullscreenElement) document.getElementById('app').requestFullscreen?.();
+  else document.exitFullscreen?.();
 });
 
-document.addEventListener('click', (e) => {
-  const clickedInsidePopover = Object.values(popovers).some(p => p.contains(e.target));
-  const clickedToolBtn = Object.values(toolButtons).some(b => b.contains(e.target));
-  if (!clickedInsidePopover && !clickedToolBtn) closeAllPopovers();
+document.addEventListener('click', e => {
+  if (!Object.values(popovers).some(p => p.contains(e.target))) {
+    Object.keys(popovers).forEach(k => { popovers[k].classList.remove('show'); toolButtons[k]?.classList.remove('active'); });
+  }
 });
 
 document.querySelectorAll('.layer-row input').forEach(input => {
   input.addEventListener('change', () => {
-    layerVisibility[input.dataset.layer] = input.checked;
-    if (input.dataset.layer === 'roads') {
-      document.querySelector('.map-roads').style.display = input.checked ? '' : 'none';
-    }
-    if (input.dataset.layer === 'labels') {
-      document.querySelectorAll('.place-label, .road-badge, .port-label').forEach(l => {
-        l.style.display = input.checked ? '' : 'none';
-      });
-    }
-    if (input.dataset.layer === 'clusters') {
-      document.getElementById('clusterPoly').style.display = input.checked ? '' : 'none';
-    }
-    renderMarkers();
+    const layer = input.dataset.layer;
+    if (layer in layerVisibility) layerVisibility[layer] = input.checked;
+    applyAllLayerVisibility();
   });
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setMapMode(btn.dataset.mode));
 });
 
 const confSlider = document.getElementById('confSlider');
@@ -490,75 +804,40 @@ const confValue = document.getElementById('confValue');
 confSlider.addEventListener('input', () => {
   minConfidence = Number(confSlider.value);
   confValue.textContent = minConfidence + '%';
-  renderMarkers();
+  applyHotspotFilter();
 });
 
-function renderMiniBars(){
-  const cats = [
-    { key: 'fire', label: 'Fire', color: 'var(--red)' },
-    { key: 'chemical', label: 'Chemical', color: 'var(--purple)' },
-    { key: 'moderate', label: 'Moderate', color: 'var(--amber)' },
-    { key: 'normal', label: 'Normal', color: 'var(--green)' },
-    { key: 'facilities', label: 'Facilities', color: 'var(--blue)' },
-  ];
-  const max = Math.max(...cats.map(c => HOTSPOTS.filter(h => h.category === c.key).length), 1);
-  const box = document.getElementById('miniBars');
-  box.innerHTML = cats.map(c => {
-    const count = HOTSPOTS.filter(h => h.category === c.key).length;
-    const pct = (count / max) * 100;
-    return `<div class="mini-bar-row">
-      <span class="lbl">${c.label}</span>
-      <span class="track"><span class="fill" style="width:${pct}%; background:${c.color};"></span></span>
-      <span class="val">${count}</span>
-    </div>`;
-  }).join('');
-}
-
-/* ---------- detail card ---------- */
-
-document.getElementById('detailClose').addEventListener('click', () => {
-  document.getElementById('detailCard').classList.add('hidden');
-});
-document.getElementById('viewDetailsBtn').addEventListener('click', () => {
-  document.getElementById('detailExtra').classList.toggle('show');
-});
-
-/* ---------- legend / filter bar ---------- */
+document.getElementById('detailClose').addEventListener('click', () => clearSelection());
 
 const legendIndicator = document.getElementById('legendIndicator');
-function positionLegendIndicator(){
+function positionLegendIndicator() {
   const active = document.querySelector('#legendOptions .legend-opt.active');
   if (!active || !legendIndicator) return;
   legendIndicator.style.left = active.offsetLeft + 'px';
   legendIndicator.style.width = active.offsetWidth + 'px';
 }
 
-document.getElementById('legendBar').addEventListener('click', (e) => {
+document.getElementById('legendOptions').addEventListener('click', e => {
   const btn = e.target.closest('[data-filter]');
   if (!btn) return;
   activeFilter = btn.dataset.filter;
-
   document.querySelectorAll('#legendOptions [data-filter]').forEach(b => {
     b.classList.toggle('active', b === btn);
     b.classList.toggle('dimmed', activeFilter !== 'all' && b !== btn);
   });
   positionLegendIndicator();
-  renderMarkers();
+  applyAllLayerVisibility();
 });
 
-window.addEventListener('resize', positionLegendIndicator);
-
-/* ---------- top nav ---------- */
-
 const navIndicator = document.getElementById('navIndicator');
-function positionNavIndicator(){
+function positionNavIndicator() {
   const active = document.querySelector('#mainNav a.active');
   if (!active || !navIndicator) return;
   navIndicator.style.left = active.offsetLeft + 'px';
   navIndicator.style.width = active.offsetWidth + 'px';
 }
 
-document.getElementById('mainNav').addEventListener('click', (e) => {
+document.getElementById('mainNav').addEventListener('click', e => {
   const link = e.target.closest('a');
   if (!link) return;
   e.preventDefault();
@@ -570,38 +849,24 @@ document.getElementById('mainNav').addEventListener('click', (e) => {
   positionNavIndicator();
 
   if (!newStage || newStage === oldStage) return;
-
-  if (!oldStage || prefersReducedMotion) {
-    if (oldStage) oldStage.classList.add('hidden');
-    newStage.classList.remove('hidden');
-    return;
-  }
-
-  // exit the current page first, then swap and enter the new one —
-  // the map (and every other page) stays mounted the whole time, only
-  // its visibility and a short opacity/translateX transition change
-  oldStage.classList.remove('stage-enter');
-  oldStage.classList.add('stage-exit');
-
-  setTimeout(() => {
-    oldStage.classList.add('hidden');
-    oldStage.classList.remove('stage-exit');
-    newStage.classList.remove('hidden');
-    newStage.classList.add('stage-enter');
-    newStage.addEventListener('animationend', function onEnterDone(ev){
-      if (ev.animationName !== 'pageEnter') return;
-      newStage.classList.remove('stage-enter');
-      newStage.removeEventListener('animationend', onEnterDone);
-    });
-  }, 140);
+  oldStage.classList.add('hidden');
+  newStage.classList.remove('hidden');
+  if (page === 'Map' && map) setTimeout(() => map.resize(), 50);
 });
 
-window.addEventListener('resize', positionNavIndicator);
-
-/* ---------- toast ---------- */
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const h = getHotspotById(selectedId);
+  if (!h) return;
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(h, null, 2));
+  const dlAnchorElem = document.createElement('a');
+  dlAnchorElem.setAttribute('href', dataStr);
+  dlAnchorElem.setAttribute('download', `incident_${h.properties.id}.geojson`);
+  dlAnchorElem.click();
+  showToast('GeoJSON exported successfully');
+});
 
 let toastTimer = null;
-function showToast(msg){
+function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -609,28 +874,19 @@ function showToast(msg){
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ---------- keyboard shortcut ⌘K / Ctrl+K ---------- */
-
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     searchInput.focus();
   }
 });
 
-/* ---------- live status ticking ---------- */
+window.addEventListener('resize', () => {
+  positionNavIndicator();
+  positionLegendIndicator();
+  if (map) map.resize();
+});
 
-function tickClock(){
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, '0');
-  const m = String(now.getMinutes()).padStart(2, '0');
-  document.getElementById('lastScan').textContent = `${h}:${m} IST`;
-}
-setInterval(tickClock, 30000);
-
-/* ---------- init ---------- */
-
-renderMarkers();
-selectHotspot(selectedId);
+initMap();
 requestAnimationFrame(positionNavIndicator);
 requestAnimationFrame(positionLegendIndicator);
