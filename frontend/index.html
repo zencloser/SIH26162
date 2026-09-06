@@ -3,10 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AGNIRA — Live Map</title>
+<title>AGNIRA — Live Industrial Thermal Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
 <link rel="stylesheet" href="style.css">
 </head>
-<body class="theme-day">
+<body class="theme-night">
 <div class="app" id="app">
 
   <!-- ============ TOP BAR ============ -->
@@ -16,8 +20,8 @@
         <svg viewBox="0 0 24 24" class="icon icon-flame" aria-hidden="true"><path d="M12 2c.6 2.2-.4 3.6-1.7 5-1.6 1.7-2.8 3.3-2.8 5.7a4.5 4.5 0 0 0 9 0c0-1.1-.3-1.9-.8-2.7.9.5 1.8 1.6 1.8 3.4A5.3 5.3 0 0 1 12 18.7a5.3 5.3 0 0 1-5.3-5.3C6.7 9.5 9 7.8 10.4 6c1-1.3 1.6-2.4 1.6-4Z" fill="currentColor"/></svg>
       </div>
       <div class="brand-text">
-        <div class="brand-name">AGNIRA <span class="monitor-badge" id="monitorBadge">MONITORING [<span id="modeWord">DAY</span>]</span></div>
-        <div class="brand-sub">From Heat to Insight · VIIRS Tactical Earth Observation</div>
+        <div class="brand-name">AGNIRA <span class="monitor-badge" id="monitorBadge">MONITORING [<span id="modeWord">NIGHT</span>]</span></div>
+        <div class="brand-sub">From Heat to Insight · Tactical Earth Observation</div>
       </div>
     </div>
 
@@ -30,7 +34,7 @@
     </nav>
 
     <div class="top-right">
-      <div class="daynight is-day" id="dayNightToggle" role="switch" aria-checked="true" tabindex="0">
+      <div class="daynight is-night" id="dayNightToggle" role="switch" aria-checked="false" tabindex="0">
         <span class="day-lbl"><svg viewBox="0 0 24 24" class="icon icon-sun" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.5v2.4M12 19.1v2.4M21.5 12h-2.4M4.9 12H2.5M18.4 5.6l-1.7 1.7M7.3 16.7l-1.7 1.7M18.4 18.4l-1.7-1.7M7.3 7.3 5.6 5.6"/></g></svg>DAY</span>
         <span class="dn-switch"><span class="dn-knob"></span></span>
         <span class="night-lbl"><span class="dot-ring"></span>NIGHT</span>
@@ -38,65 +42,54 @@
 
       <div class="search">
         <span class="search-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M20 20l-4.3-4.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-        <input id="searchInput" placeholder="Search coordinates..." autocomplete="off" />
+        <input id="searchInput" placeholder="Search location or coords..." autocomplete="off" />
         <button id="searchClear" class="search-clear" aria-label="Clear search" style="display:none;"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
         <span class="kbd" id="kbdHint">⌘K</span>
-        <div class="search-hint" id="searchHint">Try: Visakhapatnam, Parawada, Atchutapuram, Nakkapalli, or NH16</div>
+        <div class="search-hint" id="searchHint">Try: Parawada, Atchutapuram, Nakkapalli, or 17.60, 83.22</div>
       </div>
-
-      <button class="bell-btn" id="bellBtn" aria-label="Notifications">
-        <svg viewBox="0 0 24 24" class="icon icon-bell" aria-hidden="true"><path d="M12 3.2a4.4 4.4 0 0 0-4.4 4.4v2.6c0 1-.4 1.9-1 2.7l-.9 1.1c-.5.6-.1 1.5.7 1.5h11.2c.8 0 1.2-.9.7-1.5l-.9-1.1c-.6-.8-1-1.7-1-2.7V7.6A4.4 4.4 0 0 0 12 3.2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 18.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <span class="bell-dot" id="bellDot"></span>
-        <div class="bell-panel" id="bellPanel">
-          <div class="bell-panel-title">Notifications</div>
-          <div class="bell-item"><span class="bell-item-dot red"></span> New high-risk hotspot detected at Parawada Industrial Cluster</div>
-          <div class="bell-item"><span class="bell-item-dot amber"></span> Confidence threshold updated for Atchutapuram SEZ</div>
-          <div class="bell-item"><span class="bell-item-dot green"></span> VIIRS pass completed — all systems nominal</div>
-        </div>
-      </button>
     </div>
   </header>
 
-  <!-- ============ MAP PAGE ============ -->
+  <!-- ============ MAIN STAGE ============ -->
   <main class="stage" id="page-Map">
-
     <div class="map-area" id="mapArea">
-      <div class="map-bg"></div>
-      <svg class="map-roads" viewBox="0 0 700 560" preserveAspectRatio="none">
-        <path d="M -10 150 C 150 120, 300 140, 430 116 S 620 150, 720 160" class="road road-hwy"/>
-        <path d="M 260 60 C 250 150, 235 260, 195 340 S 260 470, 300 560" class="road"/>
-        <path d="M 430 116 C 420 200, 400 280, 388 340" class="road"/>
-        <path d="M 90 340 C 160 330, 230 320, 300 330" class="road"/>
-      </svg>
+      <div id="glMap" class="gl-map"></div>
+      <div class="map-loading" id="mapLoading"><span class="spin"></span>INITIALIZING GIS SATELLITE ENGINE…</div>
 
-      <div class="map-poly" id="clusterPoly"></div>
-
-      <!-- place labels -->
-      <div class="place-label lg" style="left:61%; top:44%;">Visakhapatnam</div>
-      <div class="place-label" style="left:17%; top:21%;">Anakapalle</div>
-      <div class="place-label" style="left:11%; top:66%;">Nakkapalli</div>
-      <div class="place-label" style="left:20.5%; top:59%;">Parawada</div>
-      <div class="place-label" style="left:34%; top:75%;">Atchutapuram</div>
-      <div class="place-label water" style="left:63%; top:71%;">Bay of Bengal</div>
-      <div class="road-badge" style="left:48.5%; top:22.5%;">NH16</div>
-      <div class="port-label" style="left:62%; top:36%;"><span class="port-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 3v4m0 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm0 0v10m-7-3 2.2 4.4A6 6 0 0 0 12 21a6 6 0 0 0 4.8-2.6L19 15M5 11h2m10 0h2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Visakhapatnam Port</div>
-
-      <!-- compass + scale -->
-      <div class="compass" title="North">
-        <div class="compass-arrow"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 2 L18 20 L12 16 L6 20 Z" fill="currentColor"/></svg></div><div class="compass-n">N</div>
+      <!-- Segmented Mode Switcher: STANDARD & SATELLITE -->
+      <div class="mode-switch" id="mapModeSwitch">
+        <button class="mode-btn active" data-mode="standard">STANDARD</button>
+        <button class="mode-btn" data-mode="satellite">SATELLITE</button>
       </div>
+
+      <!-- Map HUD Readouts -->
+      <div class="coord-hud" id="coordHud">
+        <span>LAT <b id="hudLat">–.–––––</b></span>
+        <span>LON <b id="hudLon">–.–––––</b></span>
+        <span class="hud-zoom">Z<b id="hudZoom">–</b></span>
+      </div>
+
       <div class="scale-bar">
-        <div class="scale-ticks"><span>0</span><span>5</span><span>10 km</span></div>
-        <div class="scale-line"></div>
+        <div class="scale-ticks"><span>0</span><span id="scaleMidLabel">–</span><span id="scaleMaxLabel">– km</span></div>
+        <div class="scale-line" id="scaleLine"></div>
       </div>
 
-      <!-- markers rendered by JS -->
-      <div class="markers-layer" id="markersLayer"></div>
+      <!-- Floating Filter Bar -->
+      <div class="legend-bar" id="legendBar">
+        <span class="legend-eyebrow">FILTERS</span>
+        <div class="legend-options" id="legendOptions">
+          <button class="legend-opt active" data-filter="all">All</button>
+          <button class="legend-opt" data-filter="industrial"><span class="dot orange"></span>Industrial</button>
+          <button class="legend-opt" data-filter="natural"><span class="dot green"></span>Natural</button>
+          <button class="legend-opt" data-filter="others"><span class="dot amber"></span>Others</button>
+          <button class="legend-opt" data-filter="facilities"><span class="fac-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M3 21V11l5 3v-3l5 3V6l6 4v11H3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>Facilities</button>
+          <span class="legend-indicator" id="legendIndicator"></span>
+        </div>
+      </div>
     </div>
 
-    <!-- floating tool rail -->
+    <!-- Floating Tool Rail -->
     <aside class="toolrail">
-      <button class="tool-btn" id="toolMenu" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       <button class="tool-btn active" id="toolLayers" title="Layers" aria-label="Layers"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 12l9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
       <button class="tool-btn" id="toolFilter" title="Filters" aria-label="Filters"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
       <button class="tool-btn" id="toolLocate" title="Recenter" aria-label="Recenter"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
@@ -104,92 +97,145 @@
       <button class="tool-btn" id="toolFullscreen" title="Fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </aside>
 
-    <!-- layers popover -->
+    <!-- Layers Popover -->
     <div class="popover" id="layersPopover">
-      <div class="popover-title">Map Layers</div>
-      <label class="layer-row"><input type="checkbox" data-layer="hotspots" checked><span>Satellite Heat Anomalies</span></label>
-      <label class="layer-row"><input type="checkbox" data-layer="clusters" checked><span>Industrial Clusters</span></label>
-      <label class="layer-row"><input type="checkbox" data-layer="facilities" checked><span>Industrial Facilities</span></label>
-      <label class="layer-row"><input type="checkbox" data-layer="roads" checked><span>Roads &amp; Transport</span></label>
-      <label class="layer-row"><input type="checkbox" data-layer="labels" checked><span>Place Labels</span></label>
+      <div class="popover-title">GIS Layers</div>
+      <label class="layer-row"><input type="checkbox" data-layer="hotspots" checked><span>Hotspots</span></label>
+      <label class="layer-row"><input type="checkbox" data-layer="riskzones" checked><span>Risk Zones</span></label>
+      <label class="layer-row"><input type="checkbox" data-layer="industrial" checked><span>Industrial Facilities</span></label>
+      <label class="layer-row"><input type="checkbox" data-layer="emergency" checked><span>Emergency Facilities</span></label>
     </div>
 
-    <!-- filters popover -->
+    <!-- Filter Popover -->
     <div class="popover" id="filterPopover">
       <div class="popover-title">Filter by Confidence</div>
       <div class="conf-row">
         <input type="range" id="confSlider" min="0" max="100" value="0">
         <span id="confValue">0%</span>
       </div>
-      <div class="popover-hint">Only show hotspots at or above this confidence.</div>
+      <div class="popover-hint">Only show hotspots at or above this threshold.</div>
     </div>
 
-    <!-- analytics popover -->
+    <!-- Analytics Popover -->
     <div class="popover" id="chartPopover">
       <div class="popover-title">Quick Analytics</div>
+      <div class="analytics-stats" id="analyticsStats"></div>
+      <div class="popover-divider"></div>
       <div class="mini-bars" id="miniBars"></div>
     </div>
 
-    <!-- detail card -->
-    <div class="detail-card hidden" id="detailCard">
-      <button class="detail-close" id="detailClose" aria-label="Close"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
-      <div class="detail-eyebrow">Status</div>
-      <div class="detail-top">
-        <span class="risk-dot" id="detailRiskDot"></span>
-        <span class="risk-label" id="detailRiskLabel">HIGH RISK</span>
-        <span class="active-pill" id="detailStatusPill">Active</span>
-      </div>
-      <h2 class="detail-title" id="detailTitle">Parawada Industrial Cluster</h2>
-      <div class="detail-loc"><span class="pin"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 21s-6.5-6.1-6.5-11A6.5 6.5 0 0 1 18.5 10c0 4.9-6.5 11-6.5 11Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.2" fill="currentColor"/></svg></span><span id="detailLoc">Visakhapatnam, Andhra Pradesh</span></div>
-      <div class="detail-coords" id="detailCoords">17.6027° N, 83.2233° E</div>
+    <!-- ============ RIGHT DETAIL CARD ============ -->
+    <div class="detail-card" id="detailCard">
+      <!-- Default Overview State -->
+      <div class="card-inner-overview" id="overviewSection">
+        <div class="detail-eyebrow">MONITORING ZONE</div>
+        <h2 class="detail-title">Visakhapatnam Industrial Zone</h2>
+        <div class="detail-loc">Andhra Pradesh · Operational Grid</div>
+        <div class="detail-divider"></div>
 
-      <div class="detail-divider"></div>
-
-      <div class="stat-row" id="statRow">
-        <div class="stat-box">
-          <div class="stat-label">Thermal Output</div>
-          <div class="stat-value" id="statThermal">32.6 <span class="unit">MW</span></div>
+        <div class="overview-grid">
+          <div class="ov-box"><span class="ov-val">124</span><span class="ov-lbl">Thermal Alerts</span></div>
+          <div class="ov-box"><span class="ov-val orange">18</span><span class="ov-lbl">Industrial Sites</span></div>
+          <div class="ov-box"><span class="ov-val">7</span><span class="ov-lbl">Persistent Nodes</span></div>
+          <div class="ov-box"><span class="ov-val red">3</span><span class="ov-lbl">Critical Events</span></div>
         </div>
-        <div class="stat-box">
-          <div class="stat-label">Temperature</div>
-          <div class="stat-value amber" id="statTemp">326 <span class="unit">K</span></div>
+
+        <div class="detail-divider"></div>
+        <div class="card-hint">Click any hotspot marker on the map to inspect telemetry, satellite outputs, and risk parameters.</div>
+      </div>
+
+      <!-- Selected Event Dossier -->
+      <div class="card-inner-selected hidden" id="selectedSection">
+        <button class="detail-close" id="detailClose" aria-label="Close"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+        <div class="detail-eyebrow">STATUS</div>
+        <div class="detail-top">
+          <span class="risk-dot" id="detailRiskDot"></span>
+          <span class="risk-label" id="detailRiskLabel">HIGH RISK</span>
+          <span class="active-pill" id="detailStatusPill">Active</span>
         </div>
-        <div class="stat-box">
-          <div class="stat-label">Confidence</div>
-          <div class="stat-value green" id="statConf">81<span class="unit">%</span></div>
+        <h2 class="detail-title" id="detailTitle">Parawada Industrial Cluster</h2>
+        <div class="detail-loc"><span class="pin"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 21s-6.5-6.1-6.5-11A6.5 6.5 0 0 1 18.5 10c0 4.9-6.5 11-6.5 11Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.2" fill="currentColor"/></svg></span><span id="detailLoc">Visakhapatnam, Andhra Pradesh</span></div>
+        <div class="detail-coords" id="detailCoords">17.6027° N, 83.2233° E</div>
+
+        <div class="detail-divider"></div>
+
+        <!-- Bike Speedometer Risk Dial with Sweep Fill & Pointer -->
+        <div class="speedometer-widget">
+          <div class="speedo-header">
+            <span class="speedo-title">RISK METER</span>
+            <span class="speedo-band-tag" id="riskBandTag">CRITICAL</span>
+          </div>
+
+          <div class="speedo-dial-wrap">
+            <svg viewBox="0 0 180 105" class="speedo-svg">
+              <defs>
+                <linearGradient id="speedoGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#28d788"/>
+                  <stop offset="45%" stop-color="#fdb830"/>
+                  <stop offset="75%" stop-color="#ff7a33"/>
+                  <stop offset="100%" stop-color="#ff4438"/>
+                </linearGradient>
+              </defs>
+              <path d="M 20 95 A 70 70 0 0 1 160 95" fill="none" stroke="var(--gauge-track)" stroke-width="10" stroke-linecap="round"/>
+              <path id="speedoArc" d="M 20 95 A 70 70 0 0 1 160 95" fill="none" stroke="url(#speedoGrad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="220"/>
+              <g id="speedoNeedleGroup" transform="translate(90, 95) rotate(-90)">
+                <line x1="0" y1="0" x2="0" y2="-54" stroke="var(--text-primary)" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="0" cy="0" r="5" fill="var(--text-primary)"/>
+              </g>
+            </svg>
+            <div class="speedo-center-val">
+              <span class="speedo-num" id="speedoVal">0</span>
+              <br>
+            
+            </div>
+          </div>
+
+          <div class="speedo-bands">
+            <span class="s-band low">LOW</span>
+            <span class="s-band mod">MODERATE</span>
+            <span class="s-band high">HIGH</span>
+          </div>
         </div>
-      </div>
 
-      <div class="detail-divider"></div>
+        <div class="detail-divider"></div>
 
-      <div class="ai-section">
-        <div class="ai-label">AI Assessment</div>
-        <div class="ai-row"><span class="flame" id="aiFlame"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 2c.6 2.2-.4 3.6-1.7 5-1.6 1.7-2.8 3.3-2.8 5.7a4.5 4.5 0 0 0 9 0c0-1.1-.3-1.9-.8-2.7.9.5 1.8 1.6 1.8 3.4A5.3 5.3 0 0 1 12 18.7a5.3 5.3 0 0 1-5.3-5.3C6.7 9.5 9 7.8 10.4 6c1-1.3 1.6-2.4 1.6-4Z" fill="currentColor"/></svg></span><span id="aiClass">Industrial Fire</span><span class="ai-pct" id="aiPct">62%</span></div>
-        <div class="ai-bar"><div class="ai-bar-fill" id="aiBarFill" style="width:0%"></div></div>
-        <p class="ai-desc" id="aiDesc">Elevated thermal output within an industrial cluster. Multiple sources confirm anomaly.</p>
-      </div>
+        <!-- Metric Stat Row -->
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="stat-label">Thermal Output</div>
+            <div class="stat-value" id="statThermal">32.6 <span class="unit">MW</span></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Temperature</div>
+            <div class="stat-value amber" id="statTemp">326 <span class="unit">K</span></div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Confidence</div>
+            <div class="stat-value green" id="statConf">81<span class="unit">%</span></div>
+          </div>
+        </div>
 
-      <div class="detail-extra" id="detailExtra">
-        <div class="extra-row"><span>Detected</span><span id="extraDetected">04 Sep 2026, 22:41 IST</span></div>
-        <div class="extra-row"><span>Area affected</span><span id="extraArea">~4.2 km²</span></div>
-        <div class="extra-row"><span>Satellite pass</span><span id="extraSat">Suomi NPP · VIIRS I-Band</span></div>
-      </div>
+        <div class="detail-divider"></div>
 
-      <button class="view-details-btn" id="viewDetailsBtn">View Details →</button>
-    </div>
+        <!-- AI Assessment Box -->
+        <div class="ai-intel-box">
+          <div class="ai-intel-title">WHY THIS EVENT WAS FLAGGED</div>
+          <div class="ai-intel-list">
+            <div class="ai-intel-item"><span class="ai-check">✓</span> Industrial facility within 1.0 km radius</div>
+            <div class="ai-intel-item"><span class="ai-check">✓</span> Persistent heat output across multi-day overpasses</div>
+            <div class="ai-intel-item"><span class="ai-check">✓</span> Thermal output exceeds baseline (&gt;20 MW)</div>
+            <div class="ai-intel-item"><span class="ai-check">✓</span> Chemical &amp; petrochemical land-use zoning</div>
+          </div>
+        </div>
 
+        <div class="detail-divider"></div>
 
-    <!-- legend / filter bar -->
-    <div class="legend-bar" id="legendBar">
-      <span class="legend-eyebrow">Filters</span>
-      <div class="legend-options" id="legendOptions">
-        <button class="legend-opt active" data-filter="all">All</button>
-        <button class="legend-opt" data-filter="fire"><span class="dot red"></span>Industrial Fire</button>
-        <button class="legend-opt" data-filter="chemical"><span class="dot purple"></span>Chemical</button>
-        <button class="legend-opt" data-filter="moderate"><span class="dot amber"></span>Moderate Risk</button>
-        <button class="legend-opt" data-filter="normal"><span class="dot green"></span>Normal</button>
-        <button class="legend-opt" data-filter="facilities"><span class="fac-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M3 21V11l5 3v-3l5 3V6l6 4v11H3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span>Facilities</button>
-        <span class="legend-indicator" id="legendIndicator"></span>
+        <div class="nearest-section">
+          <div class="section-micro-lbl">NEAREST FACILITIES (OSM)</div>
+          <div class="nearest-list" id="nearestList"></div>
+        </div>
+
+        <button class="view-details-btn" id="exportBtn">Export Incident GeoJSON →</button>
       </div>
     </div>
   </main>
@@ -197,49 +243,59 @@
   <!-- ============ PLACEHOLDER PAGES ============ -->
   <main class="stage placeholder-page hidden" id="page-Insights">
     <div class="placeholder-inner">
-      <div class="placeholder-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 18 9.5 12 14 15.5 20 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7h5.5v5.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-      <h2>Insights</h2>
-      <p>Trend analysis across all monitored clusters is being compiled. This section will surface week-over-week thermal trends, repeat offenders, and anomaly correlations.</p>
+      <h2>Analytics &amp; Correlations</h2>
+      <p>Multi-week persistent thermal flaring recurrence models for the Visakhapatnam Industrial Corridor.</p>
     </div>
   </main>
   <main class="stage placeholder-page hidden" id="page-Satellites">
     <div class="placeholder-inner">
-      <div class="placeholder-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="m7 13 4-4 4 4-4 4-4-4Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m14.5 5.5 1.8-1.8a2 2 0 0 1 2.8 0l1 1a2 2 0 0 1 0 2.8L18.3 9.3M9.5 18.5l-1.8 1.8a2 2 0 0 1-2.8 0l-1-1a2 2 0 0 1 0-2.8l1.8-1.8M3 21l3-3M18 6l3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-      <h2>Satellites</h2>
-      <p>Live pass schedules for Suomi NPP, NOAA-20, and NOAA-21 will appear here, along with next overpass countdowns for each monitored region.</p>
+      <h2>Satellite Constellation</h2>
+      <p>Live pass schedules and sensors for Suomi NPP, NOAA-20, and NOAA-21 instruments.</p>
     </div>
   </main>
   <main class="stage placeholder-page hidden" id="page-Reports">
     <div class="placeholder-inner">
-      <div class="placeholder-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M3 8.5 5 5h5l1.6 2H21v11.5A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5v-10Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
-      <h2>Reports</h2>
-      <p>Generate and export incident summaries, daily scan digests, and compliance reports for the Visakhapatnam monitoring zone.</p>
+      <h2>Compliance Reports</h2>
+      <p>Generate georeferenced spatial buffers, emission logs, and audit records.</p>
     </div>
   </main>
 
-  <!-- ============ BOTTOM STATUS BAR ============ -->
+  <!-- ============ BOTTOM STATUS & INTEGRATED TIMELINE BAR ============ -->
   <footer class="statusbar">
     <div class="status-left">
       <span class="live-badge"><span class="live-dot"></span>LIVE</span>
       <span class="sep">|</span>
-      <span><span id="activeHotspotsCount">3</span> Active Hotspots</span>
+      <span><span id="activeHotspotsCount">5</span> Active Hotspots</span>
       <span class="sep">|</span>
       <span><span id="highRiskCount">2</span> High Risk</span>
-      <span class="sep">|</span>
-      <span>Last Scan: <span id="lastScan">22:51 IST</span></span>
     </div>
+
+    <!-- Integrated Bottom Navigation Timeline -->
+    <div class="nav-timeline" id="timelineBar">
+      <button class="timeline-play" id="timelinePlay" aria-label="Play timeline">
+        <svg viewBox="0 0 24 24" class="icon icon-play" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z" fill="currentColor"/></svg>
+        <svg viewBox="0 0 24 24" class="icon icon-pause" aria-hidden="true" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
+      <span class="timeline-time" id="timelineTimeStart">09:10 pm</span>
+      <div class="timeline-track-wrap">
+        <input type="range" id="timelineSlider" min="0" max="100" value="100">
+      </div>
+      <span class="timeline-time" id="timelineTimeEnd">10:41 pm</span>
+      <span class="timeline-now" id="timelineNow">LIVE</span>
+    </div>
+
     <div class="status-right">
-      <span class="status-item"><span class="status-dot green"></span>VIIRS Online</span>
-      <span class="status-item"><span class="status-dot green"></span>AI Model Online</span>
-      <span class="status-item"><span class="status-dot green"></span>All Systems Operational</span>
-      <span class="signal-icon"><svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M3 17h2v4H3v-4Zm5-4h2v8H8v-8Zm5-5h2v13h-2V8Zm5-4h2v17h-2V4Z" fill="currentColor"/></svg></span>
+      <span class="status-item"><span class="status-dot green"></span>FIRMS Online</span>
+      <span class="status-item"><span class="status-dot green"></span>AI Model</span>
+      <span class="sep">|</span>
+      <span>Scan: <span id="lastScan">10:41 IST</span></span>
     </div>
   </footer>
-
 </div>
 
 <div class="toast" id="toast"></div>
 
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
