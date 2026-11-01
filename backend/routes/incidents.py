@@ -1,26 +1,18 @@
-import json
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 
-from models.event import Event
+from services.live_event_store import get_event
 
 
 router = APIRouter()
 
 
-DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "sample_events.json"
-
-
 @router.get("/api/incidents/{event_id}")
 def get_incident(event_id: str):
 
-    with open(DATA_FILE, "r") as file:
-        data = json.load(file)
+    live_event = get_event(event_id)
 
-    for event in data:
-        if event["id"] == event_id:
-            return Event(**event)
+    if live_event is not None:
+        return live_event
 
     raise HTTPException(
         status_code=404,

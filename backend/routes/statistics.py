@@ -1,28 +1,15 @@
-import json
-from pathlib import Path
-
 from fastapi import APIRouter
 
-from models.event import Event
+from services.live_event_store import get_all_events
 
 
 router = APIRouter()
 
 
-DATA_FILE = (
-    Path(__file__).resolve().parent.parent
-    / "data"
-    / "sample_events.json"
-)
-
-
 @router.get("/api/statistics")
 def get_statistics():
 
-    with open(DATA_FILE, "r") as file:
-        data = json.load(file)
-
-    events = [Event(**event) for event in data]
+    events = get_all_events()
 
     industrial_fires = 0
     natural_fires = 0
@@ -32,7 +19,9 @@ def get_statistics():
 
     for event in events:
 
-        classification = event.classification.label
+        # Stored events are flat LiveHotspot dicts (see models/hotspot.py),
+        # not the nested Event model - access via dict keys, not attributes.
+        classification = event.get("classification", {}).get("label")
 
         if classification == "industrial_fire":
             industrial_fires += 1
@@ -46,7 +35,7 @@ def get_statistics():
         elif classification == "persistent_source":
             persistent_sources += 1
 
-        if event.risk.severity in ["high", "critical"]:
+        if event.get("risk", {}).get("severity") in ["high", "critical"]:
             high_risk_events += 1
 
     return {
